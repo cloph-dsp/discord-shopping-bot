@@ -1,8 +1,20 @@
 const { EmbedBuilder } = require('discord.js');
 
 // Emojis used for reactions
+
+// Number emojis 1-10
+const NUMBER_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+// Regional indicator letters 🇦-🇿 (A-Z)
+const LETTER_EMOJIS = [
+  '🇦','🇧','🇨','🇩','🇪','🇫','🇬','🇭','🇮','🇯','🇰','🇱','🇲','🇳','🇴','🇵','🇶','🇷','🇸','🇹','🇺','🇻','🇼','🇽','🇾','🇿'
+];
+// Special symbols for 37-50 (pick visually distinct, non-conflicting emojis)
+const EXTRA_EMOJIS = [
+  '🅰️','🅱️','🆎','🆑','🆒','🆓','🆔','🆕','🆖','🆗','🆘','🆙','🆚','🈁','🈂️','🈷️','🈶','🈯️','🉐','🈹','🈚','🈸','🈺','🈳'
+];
+
 const EMOJIS = {
-  NUMBERS: ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'],
+  ITEM: [...NUMBER_EMOJIS, ...LETTER_EMOJIS, ...EXTRA_EMOJIS],
   CLEAR_COMPLETED: '🧹',  // Clear all checked items
   ADD_ITEM: '➕',         // Add new item
   EDIT: '✏️'              // Edit mode
@@ -24,13 +36,12 @@ function createShoppingListEmbed(list) {
   const checkedItems = list.items.filter(item => item.checked);
   const uncheckedItems = list.items.filter(item => !item.checked);
 
-  // Show all items with their numbers
+  // Show all items with their unique emoji (up to 50)
   list.items.forEach((item, index) => {
-    const numberEmoji = EMOJIS.NUMBERS[index] || `${index + 1}️⃣`;
+    const itemEmoji = EMOJIS.ITEM[index] || '❓';
     const itemText = item.checked ? `~~${item.text}~~` : item.text;
     const status = item.checked ? '✅' : '⬜';
-    
-    description += `${numberEmoji} ${status} ${itemText}\n`;
+    description += `${itemEmoji} ${status} ${itemText}\n`;
   });
 
   // Add summary

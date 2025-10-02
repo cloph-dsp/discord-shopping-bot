@@ -27,15 +27,15 @@ async function addReactionsToMessage(message, list) {
       }
     }
     
-    // Add number emojis for each item (up to 10 items)
-    for (let i = 0; i < Math.min(list.items.length, EMOJIS.NUMBERS.length); i++) {
+    // Add unique emoji for each item (up to 50 items)
+    for (let i = 0; i < Math.min(list.items.length, EMOJIS.ITEM.length); i++) {
       try {
-        await message.react(EMOJIS.NUMBERS[i]);
-        console.log(`${EMOJIS.NUMBERS[i]} Added number emoji ${i + 1}`);
+        await message.react(EMOJIS.ITEM[i]);
+        console.log(`${EMOJIS.ITEM[i]} Added item emoji ${i + 1}`);
         // Small delay between reactions to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 300));
       } catch (emojiError) {
-        console.error(`Failed to add emoji ${EMOJIS.NUMBERS[i]}:`, emojiError.message);
+        console.error(`Failed to add emoji ${EMOJIS.ITEM[i]}:`, emojiError.message);
         console.error('Emoji error code:', emojiError.code);
       }
     }
