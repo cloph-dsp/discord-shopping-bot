@@ -190,22 +190,6 @@ async function updateShoppingListMessage(message, channelId) {
   await addReactionsToMessage(message, list);
 }
 
-async function addReactionsToMessage(message, list) {
-  // Clear existing reactions
-  await message.reactions.removeAll();
-  
-  // Add reactions for each item
-  for (let i = 0; i < list.items.length; i++) {
-    const item = list.items[i];
-    if (item.inCart) {
-      await message.react(EMOJIS.PURCHASED);
-    } else {
-      await message.react(EMOJIS.CART);
-    }
-    await message.react(EMOJIS.DELETE);
-    await message.react(EMOJIS.EDIT);
-  }
-}
 
 async function updateShoppingListMessage(message, channelId) {
   const list = storage.getList(channelId);
