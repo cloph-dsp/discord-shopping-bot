@@ -1,10 +1,58 @@
-// Simple in-memory storage for shopping lists
-// In production, you'd want to use a proper database
+// Persistent file-based storage for shopping lists
+const fs = require('fs');
+const path = require('path');
 
 class ShoppingListStorage {
   constructor() {
+    this.dataDir = path.join(__dirname, '..', '..', 'data');
+    this.listsFile = path.join(this.dataDir, 'lists.json');
+    this.settingsFile = path.join(this.dataDir, 'settings.json');
+    
+    // Ensure data directory exists
+    if (!fs.existsSync(this.dataDir)) {
+      fs.mkdirSync(this.dataDir, { recursive: true });
+    }
+    
     this.lists = new Map(); // channelId -> { title, items: [], messageId }
     this.settings = new Map(); // guildId -> { shoppingChannel }
+    
+    // Load existing data
+    this.loadData();
+  }
+
+  // Data persistence methods
+  loadData() {
+    try {
+      // Load lists
+      if (fs.existsSync(this.listsFile)) {
+        const listsData = JSON.parse(fs.readFileSync(this.listsFile, 'utf8'));
+        this.lists = new Map(Object.entries(listsData));
+        console.log(`Loaded ${this.lists.size} shopping lists from storage`);
+      }
+      
+      // Load settings
+      if (fs.existsSync(this.settingsFile)) {
+        const settingsData = JSON.parse(fs.readFileSync(this.settingsFile, 'utf8'));
+        this.settings = new Map(Object.entries(settingsData));
+        console.log(`Loaded settings for ${this.settings.size} guilds from storage`);
+      }
+    } catch (error) {
+      console.error('Error loading data from storage:', error);
+    }
+  }
+
+  saveData() {
+    try {
+      // Save lists
+      const listsData = Object.fromEntries(this.lists);
+      fs.writeFileSync(this.listsFile, JSON.stringify(listsData, null, 2));
+      
+      // Save settings
+      const settingsData = Object.fromEntries(this.settings);
+      fs.writeFileSync(this.settingsFile, JSON.stringify(settingsData, null, 2));
+    } catch (error) {
+      console.error('Error saving data to storage:', error);
+    }
   }
 
   // Guild settings
@@ -15,6 +63,7 @@ class ShoppingListStorage {
     const settings = this.settings.get(guildId);
     settings.shoppingChannel = channelId;
     this.settings.set(guildId, settings);
+    this.saveData();
   }
 
   getShoppingChannel(guildId) {
@@ -36,6 +85,7 @@ class ShoppingListStorage {
       createdAt: new Date()
     };
     this.lists.set(channelId, list);
+    this.saveData();
     return list;
   }
 
@@ -56,6 +106,7 @@ class ShoppingListStorage {
 
     list.items.push(item);
     this.lists.set(channelId, list);
+    this.saveData();
     return item;
   }
 
@@ -68,6 +119,7 @@ class ShoppingListStorage {
 
     list.items.splice(itemIndex, 1);
     this.lists.set(channelId, list);
+    this.saveData();
     return true;
   }
 
@@ -80,6 +132,7 @@ class ShoppingListStorage {
 
     item.checked = !item.checked;
     this.lists.set(channelId, list);
+    this.saveData();
     return item;
   }
 
@@ -90,6 +143,7 @@ class ShoppingListStorage {
     const checkedCount = list.items.filter(item => item.checked).length;
     list.items = list.items.filter(item => !item.checked);
     this.lists.set(channelId, list);
+    this.saveData();
     return checkedCount;
   }
 
@@ -102,6 +156,7 @@ class ShoppingListStorage {
 
     item.text = newText;
     this.lists.set(channelId, list);
+    this.saveData();
     return item;
   }
 
@@ -111,6 +166,7 @@ class ShoppingListStorage {
 
     list.items = [];
     this.lists.set(channelId, list);
+    this.saveData();
     return true;
   }
 
@@ -120,11 +176,16 @@ class ShoppingListStorage {
 
     list.messageId = messageId;
     this.lists.set(channelId, list);
+    this.saveData();
     return true;
   }
 
   deleteList(channelId) {
-    return this.lists.delete(channelId);
+    const deleted = this.lists.delete(channelId);
+    if (deleted) {
+      this.saveData();
+    }
+    return deleted;
   }
 
   generateId() {
