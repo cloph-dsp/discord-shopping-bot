@@ -34,7 +34,7 @@ module.exports = {
       console.error('Error in test command:', error);
       await interaction.reply({ 
         content: `❌ Test failed: ${error.message}`, 
-        ephemeral: true 
+        flags: 64 
       });
     }
   },

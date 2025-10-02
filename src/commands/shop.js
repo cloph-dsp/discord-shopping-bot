@@ -131,7 +131,7 @@ async function handleCreate(interaction) {
         flags: 64 // Ephemeral flag
       });
     }
-  }, 1000);
+  }, 5000);
   
   // Update the initial reply
   await interaction.editReply({ 
@@ -148,7 +148,7 @@ async function handleAdd(interaction) {
   if (!list) {
     return interaction.reply({ 
       content: '❌ No shopping list found in this channel. Create one first with `/shop create`',
-      ephemeral: true 
+      flags: 64 
     });
   }
 
@@ -165,7 +165,7 @@ async function handleAdd(interaction) {
   const itemText = quantity > 1 ? `${item} (${quantity})` : item;
   await interaction.reply({ 
     content: `✅ Added "${itemText}" to the shopping list!`,
-    ephemeral: true 
+    flags: 64 
   });
 }
 
@@ -176,12 +176,12 @@ async function handleList(interaction) {
   if (!list) {
     return interaction.reply({ 
       content: '❌ No shopping list found in this channel. Create one first with `/shop create`',
-      ephemeral: true 
+      flags: 64 
     });
   }
 
   const embed = createShoppingListEmbed(list);
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.reply({ embeds: [embed], flags: 64 });
 }
 
 async function handleClear(interaction) {
@@ -191,7 +191,7 @@ async function handleClear(interaction) {
   if (!list) {
     return interaction.reply({ 
       content: '❌ No shopping list found in this channel.',
-      ephemeral: true 
+      flags: 64 
     });
   }
 
@@ -211,7 +211,7 @@ async function handleClear(interaction) {
 
   await interaction.reply({ 
     content: '✅ Shopping list cleared!',
-    ephemeral: true 
+    flags: 64 
   });
 }
 
@@ -223,7 +223,7 @@ async function handleChannel(interaction) {
   if (!interaction.member.permissions.has('MANAGE_CHANNELS')) {
     return interaction.reply({ 
       content: '❌ You need the "Manage Channels" permission to set the shopping channel.',
-      ephemeral: true 
+      flags: 64 
     });
   }
 
@@ -231,13 +231,13 @@ async function handleChannel(interaction) {
   
   await interaction.reply({ 
     content: `✅ Set ${channel} as the shopping list channel!`,
-    ephemeral: true 
+    flags: 64 
   });
 }
 
 async function handleHelp(interaction) {
   const embed = createInstructionEmbed();
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.reply({ embeds: [embed], flags: 64 });
 }
 
 // addReactionsToMessage function moved to utils/reactions.js
