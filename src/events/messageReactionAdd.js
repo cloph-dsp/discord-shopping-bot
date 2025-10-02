@@ -1,6 +1,7 @@
 const { Events } = require('discord.js');
 const storage = require('../utils/storage');
 const { EMOJIS, createShoppingListEmbed } = require('../utils/embeds');
+const { addReactionsToMessage } = require('../utils/reactions');
 
 module.exports = {
   name: Events.MessageReactionAdd,
@@ -206,4 +207,26 @@ async function addReactionsToMessage(message, list) {
   }
 }
 
-// Removed the getItemPositionFromReaction function since we're using a menu-based approach now
+async function updateShoppingListMessage(message, channelId) {
+  const list = storage.getList(channelId);
+  if (!list) return;
+
+  const embed = createShoppingListEmbed(list);
+  
+  try {
+    await message.edit({ embeds: [embed] });
+    console.log('Updated shopping list message');
+    
+    // Re-add reactions with updated state
+    setTimeout(async () => {
+      try {
+        await addReactionsToMessage(message, list);
+      } catch (error) {
+        console.error('Error re-adding reactions after update:', error);
+      }
+    }, 500);
+    
+  } catch (error) {
+    console.error('Error updating shopping list message:', error);
+  }
+}

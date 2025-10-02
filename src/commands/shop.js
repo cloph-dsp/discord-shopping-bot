@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const storage = require('../utils/storage');
 const { EMOJIS, createShoppingListEmbed, createInstructionEmbed } = require('../utils/embeds');
+const { addReactionsToMessage } = require('../utils/reactions');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -88,7 +89,7 @@ async function handleCreate(interaction) {
   if (shoppingChannel && channelId !== shoppingChannel) {
     return interaction.reply({ 
       content: `❌ Please use the designated shopping channel: <#${shoppingChannel}>`,
-      ephemeral: true 
+      flags: 64 // Ephemeral flag
     });
   }
 
@@ -107,7 +108,7 @@ async function handleCreate(interaction) {
   // Send initial reply
   await interaction.reply({ 
     content: `✅ Creating shopping list "${title}"...`, 
-    ephemeral: true 
+    flags: 64 // Ephemeral flag
   });
   
   // Send the actual shopping list as a separate message
@@ -127,7 +128,7 @@ async function handleCreate(interaction) {
       // Try to inform user of the issue
       await interaction.followUp({ 
         content: `⚠️ Created list but couldn't add reaction buttons. Bot might be missing "Add Reactions" permission.`,
-        ephemeral: true 
+        flags: 64 // Ephemeral flag
       });
     }
   }, 1000);
@@ -239,54 +240,4 @@ async function handleHelp(interaction) {
   await interaction.reply({ embeds: [embed], ephemeral: true });
 }
 
-async function addReactionsToMessage(message, list) {
-  try {
-    if (list.items.length === 0) return;
-    
-    console.log(`Adding reactions for ${list.items.length} items...`);
-    
-    // Test with a simple emoji first
-    await message.react('✅');
-    console.log('✅ Test emoji added successfully');
-    
-    // Add number emojis for each item (up to 10 items)
-    for (let i = 0; i < Math.min(list.items.length, EMOJIS.NUMBERS.length); i++) {
-      try {
-        await message.react(EMOJIS.NUMBERS[i]);
-        console.log(`${EMOJIS.NUMBERS[i]} Added number emoji ${i + 1}`);
-        // Small delay between reactions to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 200));
-      } catch (emojiError) {
-        console.error(`Failed to add emoji ${EMOJIS.NUMBERS[i]}:`, emojiError.message);
-      }
-    }
-    
-    // Add clear completed button if there are checked items
-    const hasCheckedItems = list.items.some(item => item.checked);
-    if (hasCheckedItems) {
-      try {
-        await message.react(EMOJIS.CLEAR_COMPLETED);
-        console.log(`${EMOJIS.CLEAR_COMPLETED} Added clear completed emoji`);
-      } catch (emojiError) {
-        console.error('Failed to add clear completed emoji:', emojiError.message);
-      }
-    }
-    
-    // Add utility buttons
-    try {
-      await message.react(EMOJIS.ADD_ITEM);
-      console.log(`${EMOJIS.ADD_ITEM} Added add item emoji`);
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      await message.react(EMOJIS.EDIT);
-      console.log(`${EMOJIS.EDIT} Added edit emoji`);
-    } catch (emojiError) {
-      console.error('Failed to add utility emojis:', emojiError.message);
-    }
-    
-    console.log(`Successfully added reactions to message`);
-  } catch (error) {
-    console.error('Error in addReactionsToMessage:', error);
-    throw error; // Re-throw so caller can handle it
-  }
-}
+// addReactionsToMessage function moved to utils/reactions.js
