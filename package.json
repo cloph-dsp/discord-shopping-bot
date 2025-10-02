@@ -1,0 +1,28 @@
+{
+  "name": "discord-shopping-bot",
+  "version": "1.0.0",
+  "description": "A Discord shopping list bot with emoji interactions for checking off items",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "shopping",
+    "list",
+    "emoji",
+    "reactions"
+  ],
+  "author": "Discord Shopping Bot",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
