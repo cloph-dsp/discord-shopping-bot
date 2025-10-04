@@ -27,16 +27,14 @@ async function addReactionsToMessage(message, list) {
       }
     }
     
-    // Add unique emoji for each item (up to 50 items)
+    // Add unique emoji for each item (up to 50 items) - faster for shopping
     for (let i = 0; i < Math.min(list.items.length, EMOJIS.ITEM.length); i++) {
       try {
         await message.react(EMOJIS.ITEM[i]);
-        console.log(`${EMOJIS.ITEM[i]} Added item emoji ${i + 1}`);
-        // Small delay between reactions to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Reduced delay for faster shopping experience
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (emojiError) {
         console.error(`Failed to add emoji ${EMOJIS.ITEM[i]}:`, emojiError.message);
-        console.error('Emoji error code:', emojiError.code);
       }
     }
     
@@ -45,21 +43,17 @@ async function addReactionsToMessage(message, list) {
     if (hasCheckedItems) {
       try {
         await message.react(EMOJIS.CLEAR_COMPLETED);
-        console.log(`${EMOJIS.CLEAR_COMPLETED} Added clear completed emoji`);
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (emojiError) {
         console.error('Failed to add clear completed emoji:', emojiError.message);
       }
     }
     
-    // Add utility buttons
+    // Add utility buttons faster
     try {
       await message.react(EMOJIS.ADD_ITEM);
-      console.log(`${EMOJIS.ADD_ITEM} Added add item emoji`);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
+      await new Promise(resolve => setTimeout(resolve, 100));
       await message.react(EMOJIS.EDIT);
-      console.log(`${EMOJIS.EDIT} Added edit emoji`);
     } catch (emojiError) {
       console.error('Failed to add utility emojis:', emojiError.message);
     }

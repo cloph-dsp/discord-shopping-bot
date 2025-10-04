@@ -25,7 +25,7 @@ module.exports = {
         .setDescription('Add an item to the current shopping list')
         .addStringOption(option =>
           option.setName('item')
-            .setDescription('Item to add')
+            .setDescription('Item(s) to add (separate multiple with semicolons: "milk;bread;eggs")')
             .setRequired(true))
         .addIntegerOption(option =>
           option.setName('quantity')
@@ -110,7 +110,7 @@ async function handleCreate(interaction) {
   console.log(`Created shopping list message with ID: ${message.id}`);
   // Store the message ID for reaction handling
   storage.setMessageId(channelId, message.id);
-  // Add reactions for each item (with delay to ensure message is ready)
+  // Add reactions quickly for better shopping experience
   setTimeout(async () => {
     try {
       await addReactionsToMessage(message, list);
@@ -122,7 +122,7 @@ async function handleCreate(interaction) {
         flags: 64 // Ephemeral flag
       });
     }
-  }, 5000);
+  }, 1000);
   // Update the initial reply
   await interaction.editReply({ 
     content: `✅ Created shopping list "${title}" with ${list.items.length} items! Click the number emojis below to check items.`
@@ -131,7 +131,7 @@ async function handleCreate(interaction) {
 
 async function handleAdd(interaction) {
   await interaction.deferReply({ flags: 64 });
-  const item = interaction.options.getString('item');
+  const itemInput = interaction.options.getString('item');
   const quantity = interaction.options.getInteger('quantity') || 1;
   const channelId = interaction.channel.id;
 
@@ -143,16 +143,37 @@ async function handleAdd(interaction) {
     });
   }
 
-  storage.addItem(channelId, item, quantity);
+  // Parse multiple items separated by semicolons
+  const items = itemInput.split(';').map(item => item.trim()).filter(item => item.length > 0);
+  
+  if (items.length === 0) {
+    return interaction.editReply({ 
+      content: '❌ Please provide at least one valid item.',
+      flags: 64 
+    });
+  }
+
+  // Add each item to the list
+  let addedItems = [];
+  for (const item of items) {
+    storage.addItem(channelId, item, quantity);
+    const itemText = quantity > 1 ? `${item} (${quantity})` : item;
+    addedItems.push(itemText);
+  }
+
   // Update the shopping list message
   const message = await interaction.channel.messages.fetch(list.messageId);
   const embed = createShoppingListEmbed(storage.getList(channelId));
   await message.edit({ embeds: [embed] });
   // Re-add reactions
   await addReactionsToMessage(message, storage.getList(channelId));
-  const itemText = quantity > 1 ? `${item} (${quantity})` : item;
+  
+  const resultText = items.length === 1 
+    ? `✅ Added "${addedItems[0]}" to the shopping list!`
+    : `✅ Added ${items.length} items to the shopping list:\n• ${addedItems.join('\n• ')}`;
+    
   await interaction.editReply({ 
-    content: `✅ Added "${itemText}" to the shopping list!`,
+    content: resultText,
     flags: 64 
   });
 }
@@ -192,15 +213,14 @@ async function handleList(interaction) {
   // Update stored message ID
   storage.setMessageId(channelId, message.id);
   
-  // Add reactions with a delay
+  // Add reactions quickly for immediate shopping
   setTimeout(async () => {
     try {
       await addReactionsToMessage(message, list);
-      console.log('Added reactions to recalled shopping list');
     } catch (error) {
       console.error('Error adding reactions to recalled list:', error);
     }
-  }, 1000);
+  }, 500);
   
   // Update the ephemeral reply
   await interaction.editReply({ 

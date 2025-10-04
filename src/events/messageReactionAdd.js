@@ -41,10 +41,7 @@ async function handleReaction(reaction, user) {
   console.log(`Processing reaction: ${emoji}`);
   
   try {
-    // Remove the user's reaction immediately
-    await reaction.users.remove(user.id);
-
-    // Handle different types of reactions
+    // Handle different types of reactions first (faster response)
     if (EMOJIS.ITEM.includes(emoji)) {
       // Item emoji - toggle item checked status
       const itemIndex = EMOJIS.ITEM.indexOf(emoji);
@@ -62,6 +59,11 @@ async function handleReaction(reaction, user) {
       // Edit mode - show instructions
       await handleEditMode(message, channelId, user);
     }
+
+    // Remove the user's reaction after processing (non-blocking for speed)
+    reaction.users.remove(user.id).catch(err => 
+      console.log('Could not remove reaction (might be missing permissions)')
+    );
   } catch (error) {
     console.error('Error handling reaction:', error);
   }
@@ -90,7 +92,7 @@ async function handleClearCompleted(message, channelId, user) {
 
 async function handleAddItem(message, channelId, user) {
   await message.channel.send(
-    `➕ ${user.username}, what would you like to add to the shopping list?\n*Type \`cancel\` to cancel.*`
+    `➕ ${user.username}, what would you like to add to the shopping list?\n*Separate multiple items with semicolons (;). Type \`cancel\` to cancel.*`
   );
   
   const filter = m => m.author.id === user.id;
@@ -102,9 +104,28 @@ async function handleAddItem(message, channelId, user) {
       return;
     }
     
-    storage.addItem(channelId, m.content);
+    // Parse multiple items separated by semicolons
+    const items = m.content.split(';').map(item => item.trim()).filter(item => item.length > 0);
+    
+    if (items.length === 0) {
+      await m.reply('❌ Please provide at least one valid item.');
+      return;
+    }
+    
+    // Add each item to the list
+    let addedItems = [];
+    for (const item of items) {
+      storage.addItem(channelId, item);
+      addedItems.push(item);
+    }
+    
     await updateShoppingListMessage(message, channelId);
-    await m.reply(`➕ Added "${m.content}" to the shopping list!`);
+    
+    const resultText = items.length === 1 
+      ? `➕ Added "${addedItems[0]}" to the shopping list!`
+      : `➕ Added ${items.length} items to the shopping list:\n• ${addedItems.join('\n• ')}`;
+      
+    await m.reply(resultText);
   });
   
   collector.on('end', (collected, reason) => {
@@ -205,17 +226,17 @@ async function updateShoppingListMessage(message, channelId) {
   const embed = createShoppingListEmbed(list);
   
   try {
+    // Update message content immediately for faster feedback
     await message.edit({ embeds: [embed] });
-    console.log('Updated shopping list message');
     
-    // Re-add reactions with updated state
+    // Re-add reactions faster for rapid clicking
     setTimeout(async () => {
       try {
         await addReactionsToMessage(message, list);
       } catch (error) {
         console.error('Error re-adding reactions after update:', error);
       }
-    }, 500);
+    }, 200);
     
   } catch (error) {
     console.error('Error updating shopping list message:', error);
