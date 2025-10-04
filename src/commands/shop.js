@@ -93,6 +93,8 @@ async function handleCreate(interaction) {
     });
   }
 
+  await interaction.deferReply({ flags: 64 });
+
   // Parse items
   let items = [];
   if (itemsString) {
@@ -101,24 +103,13 @@ async function handleCreate(interaction) {
 
   // Create the shopping list
   const list = storage.createList(channelId, title, items);
-  
   // Create and send the embed as a regular message (not interaction reply)
   const embed = createShoppingListEmbed(list);
-  
-  // Send initial reply
-  await interaction.reply({ 
-    content: `✅ Creating shopping list "${title}"...`, 
-    flags: 64 // Ephemeral flag
-  });
-  
   // Send the actual shopping list as a separate message
   const message = await interaction.channel.send({ embeds: [embed] });
-  
   console.log(`Created shopping list message with ID: ${message.id}`);
-  
   // Store the message ID for reaction handling
   storage.setMessageId(channelId, message.id);
-  
   // Add reactions for each item (with delay to ensure message is ready)
   setTimeout(async () => {
     try {
@@ -132,7 +123,6 @@ async function handleCreate(interaction) {
       });
     }
   }, 5000);
-  
   // Update the initial reply
   await interaction.editReply({ 
     content: `✅ Created shopping list "${title}" with ${list.items.length} items! Click the number emojis below to check items.`
@@ -140,63 +130,90 @@ async function handleCreate(interaction) {
 }
 
 async function handleAdd(interaction) {
+  await interaction.deferReply({ flags: 64 });
   const item = interaction.options.getString('item');
   const quantity = interaction.options.getInteger('quantity') || 1;
   const channelId = interaction.channel.id;
 
   const list = storage.getList(channelId);
   if (!list) {
-    return interaction.reply({ 
+    return interaction.editReply({ 
       content: '❌ No shopping list found in this channel. Create one first with `/shop create`',
       flags: 64 
     });
   }
 
   storage.addItem(channelId, item, quantity);
-  
   // Update the shopping list message
   const message = await interaction.channel.messages.fetch(list.messageId);
   const embed = createShoppingListEmbed(storage.getList(channelId));
   await message.edit({ embeds: [embed] });
-  
   // Re-add reactions
   await addReactionsToMessage(message, storage.getList(channelId));
-  
   const itemText = quantity > 1 ? `${item} (${quantity})` : item;
-  await interaction.reply({ 
+  await interaction.editReply({ 
     content: `✅ Added "${itemText}" to the shopping list!`,
     flags: 64 
   });
 }
 
 async function handleList(interaction) {
+  await interaction.deferReply({ flags: 64 });
   const channelId = interaction.channel.id;
   const list = storage.getList(channelId);
-
   if (!list) {
-    return interaction.reply({ 
+    return interaction.editReply({ 
       content: '❌ No shopping list found in this channel. Create one first with `/shop create`',
       flags: 64 
     });
   }
-
+  
+  // Delete old message if it exists
+  if (list.messageId) {
+    try {
+      const oldMessage = await interaction.channel.messages.fetch(list.messageId);
+      await oldMessage.delete();
+      console.log('Deleted old shopping list message');
+    } catch (error) {
+      console.log('Could not delete old message (might already be deleted)');
+    }
+  }
+  
   const embed = createShoppingListEmbed(list);
-  await interaction.reply({ embeds: [embed], flags: 64 });
+  
+  // Send new public message with the shopping list
+  const message = await interaction.channel.send({ embeds: [embed] });
+  
+  // Update stored message ID
+  storage.setMessageId(channelId, message.id);
+  
+  // Add reactions with a delay
+  setTimeout(async () => {
+    try {
+      await addReactionsToMessage(message, list);
+      console.log('Added reactions to recalled shopping list');
+    } catch (error) {
+      console.error('Error adding reactions to recalled list:', error);
+    }
+  }, 1000);
+  
+  // Confirm with ephemeral reply
+  await interaction.editReply({ 
+    content: `✅ Shopping list "${list.title}" recalled and updated with fresh emoji buttons!`
+  });
 }
 
 async function handleClear(interaction) {
+  await interaction.deferReply({ flags: 64 });
   const channelId = interaction.channel.id;
   const list = storage.getList(channelId);
-
   if (!list) {
-    return interaction.reply({ 
+    return interaction.editReply({ 
       content: '❌ No shopping list found in this channel.',
       flags: 64 
     });
   }
-
   storage.clearList(channelId);
-  
   // Update the message
   if (list.messageId) {
     try {
@@ -208,36 +225,34 @@ async function handleClear(interaction) {
       console.error('Error updating message after clear:', error);
     }
   }
-
-  await interaction.reply({ 
+  await interaction.editReply({ 
     content: '✅ Shopping list cleared!',
     flags: 64 
   });
 }
 
 async function handleChannel(interaction) {
+  await interaction.deferReply({ flags: 64 });
   const channel = interaction.options.getChannel('channel');
   const guildId = interaction.guild.id;
-
   // Check if user has permission to manage channels
   if (!interaction.member.permissions.has('MANAGE_CHANNELS')) {
-    return interaction.reply({ 
+    return interaction.editReply({ 
       content: '❌ You need the "Manage Channels" permission to set the shopping channel.',
       flags: 64 
     });
   }
-
   storage.setShoppingChannel(guildId, channel.id);
-  
-  await interaction.reply({ 
+  await interaction.editReply({ 
     content: `✅ Set ${channel} as the shopping list channel!`,
     flags: 64 
   });
 }
 
 async function handleHelp(interaction) {
+  await interaction.deferReply({ flags: 64 });
   const embed = createInstructionEmbed();
-  await interaction.reply({ embeds: [embed], flags: 64 });
+  await interaction.editReply({ embeds: [embed], flags: 64 });
 }
 
 // addReactionsToMessage function moved to utils/reactions.js

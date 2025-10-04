@@ -36,17 +36,19 @@ function createShoppingListEmbed(list) {
   const checkedItems = list.items.filter(item => item.checked);
   const uncheckedItems = list.items.filter(item => !item.checked);
 
-  // Show all items with their unique emoji (up to 50)
+  // Show all items with their unique emoji (up to 50) - improved formatting
   list.items.forEach((item, index) => {
     const itemEmoji = EMOJIS.ITEM[index] || '❓';
-    const itemText = item.checked ? `~~${item.text}~~` : item.text;
+    const itemText = item.checked ? `~~**${item.text}**~~` : `**${item.text}**`;
     const status = item.checked ? '✅' : '⬜';
-    description += `${itemEmoji} ${status} ${itemText}\n`;
+    
+    // Add extra spacing and larger text formatting
+    description += `\n${itemEmoji}  ${status}  ${itemText}\n`;
   });
 
-  // Add summary
+  // Add summary with better formatting
   if (checkedItems.length > 0) {
-    description += `\n**Progress:** ${checkedItems.length}/${list.items.length} items checked`;
+    description += `\n\n📊 **Progress:** ${checkedItems.length}/${list.items.length} items checked`;
   }
 
   embed.setDescription(description);
