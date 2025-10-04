@@ -158,15 +158,20 @@ async function handleAdd(interaction) {
 }
 
 async function handleList(interaction) {
-  await interaction.deferReply({ flags: 64 });
   const channelId = interaction.channel.id;
   const list = storage.getList(channelId);
   if (!list) {
-    return interaction.editReply({ 
+    return interaction.reply({ 
       content: '❌ No shopping list found in this channel. Create one first with `/shop create`',
       flags: 64 
     });
   }
+  
+  // Send quick acknowledgment first
+  await interaction.reply({ 
+    content: `🔄 Recalling shopping list "${list.title}"...`,
+    flags: 64 
+  });
   
   // Delete old message if it exists
   if (list.messageId) {
@@ -197,7 +202,7 @@ async function handleList(interaction) {
     }
   }, 1000);
   
-  // Confirm with ephemeral reply
+  // Update the ephemeral reply
   await interaction.editReply({ 
     content: `✅ Shopping list "${list.title}" recalled and updated with fresh emoji buttons!`
   });

@@ -46,10 +46,8 @@ function createShoppingListEmbed(list) {
     description += `\n${itemEmoji}  ${status}  ${itemText}\n`;
   });
 
-  // Add summary with better formatting
-  if (checkedItems.length > 0) {
-    description += `\n\n📊 **Progress:** ${checkedItems.length}/${list.items.length} items checked`;
-  }
+  // Remove empty lines at the end
+  description = description.trim();
 
   embed.setDescription(description);
 
