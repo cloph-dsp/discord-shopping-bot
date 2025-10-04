@@ -38,7 +38,8 @@ module.exports = {
         .addStringOption(option =>
           option.setName('title')
             .setDescription('Title of the list to display')
-            .setRequired(false)))
+            .setRequired(false)
+            .setAutocomplete(true)))
     .addSubcommand(subcommand =>
       subcommand
         .setName('clear')
@@ -80,6 +81,17 @@ module.exports = {
         break;
     }
   },
+  // Autocomplete handler for list titles
+  async autocomplete(interaction) {
+    const focused = interaction.options.getFocused();
+    const titles = storage.getAllListTitles();
+    const filtered = titles.filter(title =>
+      title.toLowerCase().startsWith(focused.toLowerCase())
+    ).slice(0, 25);
+    await interaction.respond(
+      filtered.map(title => ({ name: title, value: title }))
+    );
+  }
 };
 
 async function handleCreate(interaction) {

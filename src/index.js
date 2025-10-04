@@ -46,6 +46,19 @@ for (const file of eventFiles) {
 
 // Handle interactions
 client.on('interactionCreate', async interaction => {
+  // Handle autocomplete interactions for command options
+  if (interaction.isAutocomplete()) {
+    const command = interaction.client.commands.get(interaction.commandName);
+    if (command && typeof command.autocomplete === 'function') {
+      try {
+        await command.autocomplete(interaction);
+      } catch (error) {
+        console.error('Autocomplete error:', error);
+      }
+    }
+    return;
+  }
+  
   if (!interaction.isChatInputCommand()) return;
 
   const command = interaction.client.commands.get(interaction.commandName);
