@@ -1,6 +1,7 @@
 const { EMOJIS } = require('./embeds');
 
-async function addReactionsToMessage(message, list) {
+async function addReactionsToMessage(message, list, options = {}) {
+  const skipDelays = options.skipDelays === true;
   try {
     if (list.items.length === 0) return;
     
@@ -31,8 +32,7 @@ async function addReactionsToMessage(message, list) {
     for (let i = 0; i < Math.min(list.items.length, EMOJIS.ITEM.length); i++) {
       try {
         await message.react(EMOJIS.ITEM[i]);
-        // Reduced delay for faster shopping experience
-        await new Promise(resolve => setTimeout(resolve, 100));
+        if (!skipDelays) await new Promise(resolve => setTimeout(resolve, 100));
       } catch (emojiError) {
         console.error(`Failed to add emoji ${EMOJIS.ITEM[i]}:`, emojiError.message);
       }
@@ -43,7 +43,7 @@ async function addReactionsToMessage(message, list) {
     if (hasCheckedItems) {
       try {
         await message.react(EMOJIS.CLEAR_COMPLETED);
-        await new Promise(resolve => setTimeout(resolve, 100));
+        if (!skipDelays) await new Promise(resolve => setTimeout(resolve, 100));
       } catch (emojiError) {
         console.error('Failed to add clear completed emoji:', emojiError.message);
       }
@@ -52,7 +52,7 @@ async function addReactionsToMessage(message, list) {
     // Add utility buttons faster
     try {
       await message.react(EMOJIS.ADD_ITEM);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      if (!skipDelays) await new Promise(resolve => setTimeout(resolve, 100));
       await message.react(EMOJIS.EDIT);
     } catch (emojiError) {
       console.error('Failed to add utility emojis:', emojiError.message);

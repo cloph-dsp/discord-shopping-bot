@@ -113,7 +113,7 @@ async function handleCreate(interaction) {
   // Add reactions quickly for better shopping experience
   setTimeout(async () => {
     try {
-      await addReactionsToMessage(message, list);
+  await addReactionsToMessage(message, list, { skipDelays: true });
     } catch (error) {
       console.error('Error adding reactions:', error);
       // Try to inform user of the issue
@@ -166,7 +166,7 @@ async function handleAdd(interaction) {
   const embed = createShoppingListEmbed(storage.getList(channelId));
   await message.edit({ embeds: [embed] });
   // Re-add reactions
-  await addReactionsToMessage(message, storage.getList(channelId));
+  await addReactionsToMessage(message, storage.getList(channelId), { skipDelays: true });
   
   const resultText = items.length === 1 
     ? `✅ Added "${addedItems[0]}" to the shopping list!`

@@ -112,19 +112,30 @@ async function handleAddItem(message, channelId, user) {
       return;
     }
     
-    // Add each item to the list
+    // Add each item to the list sequentially
     let addedItems = [];
     for (const item of items) {
-      storage.addItem(channelId, item);
-      addedItems.push(item);
+      try {
+        storage.addItem(channelId, item);
+        addedItems.push(item);
+      } catch (err) {
+        console.error('Error adding item', item, err);
+        await m.reply(`❌ Failed to add "${item}". Continuing with next.`);
+      }
     }
     
-    await updateShoppingListMessage(message, channelId);
+    // Update the shopping list message sequentially
+    try {
+      await updateShoppingListMessage(message, channelId);
+    } catch (err) {
+      console.error('Error updating shopping list after add:', err);
+      await m.reply('⚠️ Could not refresh the shopping list after adding items.');
+    }
     
-    const resultText = items.length === 1 
+    // Send summary of added items
+    const resultText = addedItems.length === 1 
       ? `➕ Added "${addedItems[0]}" to the shopping list!`
-      : `➕ Added ${items.length} items to the shopping list:\n• ${addedItems.join('\n• ')}`;
-      
+      : `➕ Added ${addedItems.length} items to the shopping list:\n• ${addedItems.join('\n• ')}`;
     await m.reply(resultText);
   });
   
@@ -207,16 +218,6 @@ async function handleEditItem(message, item, channelId, user) {
   });
 }
 
-async function updateShoppingListMessage(message, channelId) {
-  const list = storage.getList(channelId);
-  if (!list) return;
-
-  const embed = createShoppingListEmbed(list);
-  await message.edit({ embeds: [embed] });
-  
-  // Re-add reactions if needed
-  await addReactionsToMessage(message, list);
-}
 
 
 async function updateShoppingListMessage(message, channelId) {
@@ -226,18 +227,14 @@ async function updateShoppingListMessage(message, channelId) {
   const embed = createShoppingListEmbed(list);
   
   try {
-    // Update message content immediately for faster feedback
+    // Update message content immediately
     await message.edit({ embeds: [embed] });
-    
-    // Re-add reactions faster for rapid clicking
-    setTimeout(async () => {
-      try {
-        await addReactionsToMessage(message, list);
-      } catch (error) {
-        console.error('Error re-adding reactions after update:', error);
-      }
-    }, 200);
-    
+    // Re-add reactions immediately with no delays
+    try {
+      await addReactionsToMessage(message, list, { skipDelays: true });
+    } catch (error) {
+      console.error('Error re-adding reactions after update:', error);
+    }
   } catch (error) {
     console.error('Error updating shopping list message:', error);
   }
