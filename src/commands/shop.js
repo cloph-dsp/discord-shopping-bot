@@ -35,9 +35,9 @@ module.exports = {
       subcommand
         .setName('list')
         .setDescription('Display the current shopping list')
-        .addChannelOption(option =>
-          option.setName('channel')
-            .setDescription('Channel of the list to display')
+        .addStringOption(option =>
+          option.setName('title')
+            .setDescription('Title of the list to display')
             .setRequired(false)))
     .addSubcommand(subcommand =>
       subcommand
@@ -88,14 +88,6 @@ async function handleCreate(interaction) {
   const channelId = interaction.channel.id;
   const guildId = interaction.guild.id;
 
-  // Check if this is the designated shopping channel
-  const shoppingChannel = storage.getShoppingChannel(guildId);
-  if (shoppingChannel && channelId !== shoppingChannel) {
-    return interaction.reply({ 
-      content: `❌ Please use the designated shopping channel: <#${shoppingChannel}>`,
-      flags: 64 // Ephemeral flag
-    });
-  }
 
   await interaction.deferReply({ flags: 64 });
 
@@ -183,14 +175,31 @@ async function handleAdd(interaction) {
 }
 
 async function handleList(interaction) {
-  // Determine target channel (default to current)
-  const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
-  const channelId = targetChannel.id;
-  const list = storage.getList(channelId);
+  // Determine target list: by title or current channel
+  const titleOption = interaction.options.getString('title');
+  let channelId, list, targetChannel;
+  if (titleOption) {
+    const found = storage.getListByTitle(titleOption);
+    if (!found) {
+      const titles = storage.getAllListTitles();
+      return interaction.reply({ content: `❌ No list titled "${titleOption}". Available titles: ${titles.join(', ')}`, flags: 64 });
+    }
+    channelId = found.channelId;
+    list = found.list;
+    targetChannel = interaction.client.channels.cache.get(channelId) || interaction.channel;
+  } else {
+    targetChannel = interaction.channel;
+    channelId = targetChannel.id;
+    list = storage.getList(channelId);
+  }
 
   if (!list) {
+    const titles = storage.getAllListTitles();
+    if (titles.length === 0) {
+      return interaction.reply({ content: '❌ No lists exist. Create one with `/shop create`', flags: 64 });
+    }
     return interaction.reply({ 
-      content: `❌ No shopping list found in ${targetChannel}. Create one first with \`/shop create\``,
+      content: `❌ No shopping list found. Available titles: ${titles.join(', ')}`,
       flags: 64 
     });
   }

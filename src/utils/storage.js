@@ -198,6 +198,21 @@ class ShoppingListStorage {
     if (!list || index < 0 || index >= list.items.length) return null;
     return list.items[index];
   }
+  
+  // Find a list by its title
+  getListByTitle(title) {
+    for (const [channelId, list] of this.lists.entries()) {
+      if (list.title === title) {
+        return { channelId, list };
+      }
+    }
+    return null;
+  }
+
+  // Get all list titles
+  getAllListTitles() {
+    return Array.from(this.lists.values()).map(list => list.title);
+  }
 }
 
 module.exports = new ShoppingListStorage();

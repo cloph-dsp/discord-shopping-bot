@@ -21,7 +21,7 @@ A Discord bot that creates interactive shopping lists using emoji reactions for 
 
 - `/shop create <title> [items]` - Create a new shopping list
 - `/shop add <item> [quantity]` - Add item(s) to current shopping list (separate multiple with `;`)
-- `/shop list` - Display current shopping list
+ - `/shop list [title]` - Display a shopping list by title or the current channel's list if no title is provided
 - `/shop clear` - Clear the current shopping list
 - `/shop channel <channel>` - Set the shopping list channel
 
@@ -71,8 +71,11 @@ A Discord bot that creates interactive shopping lists using emoji reactions for 
 
 1. Set a shopping channel: `/shop channel #shopping`
 2. Create a shopping list: `/shop create "Weekly Groceries" milk;bread;eggs`
-3. Add multiple items at once: `/shop add "butter;cheese;yogurt"`
-4. Users can click emojis to interact with items:
+3. Display a shopping list:
+   - Current channel: `/shop list`
+   - By title: `/shop list "Weekly Groceries"`
+4. Add multiple items at once: `/shop add "butter;cheese;yogurt"`
+5. Users can click emojis to interact with items:
    - 1️⃣2️⃣3️⃣ to check/uncheck specific items (becomes ~~strikethrough~~)
    - 🧹 to clear all checked items at once
    - ➕ to add new items quickly
