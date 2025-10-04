@@ -28,19 +28,26 @@ async function handleReaction(reaction, user) {
   const channelId = message.channel.id;
   const list = storage.getList(channelId);
 
+  console.log(`Reaction detected: ${reaction.emoji.name} by ${user.username}`);
+  console.log(`Message ID: ${message.id}, Stored ID: ${list ? list.messageId : 'none'}`);
+
   // Only handle reactions on shopping list messages
-  if (!list || list.messageId !== message.id) return;
+  if (!list || list.messageId !== message.id) {
+    console.log('Ignoring reaction - not a shopping list message or wrong message ID');
+    return;
+  }
 
   const emoji = reaction.emoji.name;
+  console.log(`Processing reaction: ${emoji}`);
   
   try {
     // Remove the user's reaction immediately
     await reaction.users.remove(user.id);
 
     // Handle different types of reactions
-    if (EMOJIS.NUMBERS.includes(emoji)) {
-      // Number emoji - toggle item checked status
-      const itemIndex = EMOJIS.NUMBERS.indexOf(emoji);
+    if (EMOJIS.ITEM.includes(emoji)) {
+      // Item emoji - toggle item checked status
+      const itemIndex = EMOJIS.ITEM.indexOf(emoji);
       if (itemIndex < list.items.length) {
         const item = list.items[itemIndex];
         await handleItemToggle(message, item, channelId, user);
