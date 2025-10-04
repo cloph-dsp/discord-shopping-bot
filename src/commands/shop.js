@@ -34,7 +34,11 @@ module.exports = {
     .addSubcommand(subcommand =>
       subcommand
         .setName('list')
-        .setDescription('Display the current shopping list'))
+        .setDescription('Display the current shopping list')
+        .addChannelOption(option =>
+          option.setName('channel')
+            .setDescription('Channel of the list to display')
+            .setRequired(false)))
     .addSubcommand(subcommand =>
       subcommand
         .setName('clear')
@@ -179,25 +183,28 @@ async function handleAdd(interaction) {
 }
 
 async function handleList(interaction) {
-  const channelId = interaction.channel.id;
+  // Determine target channel (default to current)
+  const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+  const channelId = targetChannel.id;
   const list = storage.getList(channelId);
+
   if (!list) {
     return interaction.reply({ 
-      content: '❌ No shopping list found in this channel. Create one first with `/shop create`',
+      content: `❌ No shopping list found in ${targetChannel}. Create one first with \`/shop create\``,
       flags: 64 
     });
   }
   
   // Send quick acknowledgment first
   await interaction.reply({ 
-    content: `🔄 Recalling shopping list "${list.title}"...`,
+    content: `🔄 Recalling shopping list "${list.title}" from ${targetChannel}...`,
     flags: 64 
   });
   
   // Delete old message if it exists
   if (list.messageId) {
     try {
-      const oldMessage = await interaction.channel.messages.fetch(list.messageId);
+      const oldMessage = await targetChannel.messages.fetch(list.messageId);
       await oldMessage.delete();
       console.log('Deleted old shopping list message');
     } catch (error) {
@@ -208,7 +215,7 @@ async function handleList(interaction) {
   const embed = createShoppingListEmbed(list);
   
   // Send new public message with the shopping list
-  const message = await interaction.channel.send({ embeds: [embed] });
+  const message = await targetChannel.send({ embeds: [embed] });
   
   // Update stored message ID
   storage.setMessageId(channelId, message.id);
@@ -224,7 +231,7 @@ async function handleList(interaction) {
   
   // Update the ephemeral reply
   await interaction.editReply({ 
-    content: `✅ Shopping list "${list.title}" recalled and updated with fresh emoji buttons!`
+    content: `✅ Shopping list "${list.title}" recalled in ${targetChannel} and updated with fresh emoji buttons!`
   });
 }
 
