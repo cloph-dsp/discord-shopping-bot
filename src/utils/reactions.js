@@ -27,35 +27,43 @@ async function addReactionsToMessage(message, list, options = {}) {
         console.error('Error code:', removeError.code);
       }
     }
+
+    // Collect all reactions to add in parallel
+    const reactionsToAdd = [];
     
-    // Add unique emoji for each item (up to 50 items) - faster for shopping
+    // Add unique emoji for each item (up to 50 items)
     for (let i = 0; i < Math.min(list.items.length, EMOJIS.ITEM.length); i++) {
-      try {
-        await message.react(EMOJIS.ITEM[i]);
-        if (!skipDelays) await new Promise(resolve => setTimeout(resolve, 100));
-      } catch (emojiError) {
-        console.error(`Failed to add emoji ${EMOJIS.ITEM[i]}:`, emojiError.message);
-      }
+      reactionsToAdd.push(EMOJIS.ITEM[i]);
     }
     
     // Add clear completed button if there are checked items
     const hasCheckedItems = list.items.some(item => item.checked);
     if (hasCheckedItems) {
-      try {
-        await message.react(EMOJIS.CLEAR_COMPLETED);
-        if (!skipDelays) await new Promise(resolve => setTimeout(resolve, 100));
-      } catch (emojiError) {
-        console.error('Failed to add clear completed emoji:', emojiError.message);
-      }
+      reactionsToAdd.push(EMOJIS.CLEAR_COMPLETED);
     }
     
-    // Add utility buttons faster
-    try {
-      await message.react(EMOJIS.ADD_ITEM);
-      if (!skipDelays) await new Promise(resolve => setTimeout(resolve, 100));
-      await message.react(EMOJIS.EDIT);
-    } catch (emojiError) {
-      console.error('Failed to add utility emojis:', emojiError.message);
+    // Always add utility buttons
+    reactionsToAdd.push(EMOJIS.ADD_ITEM);
+    reactionsToAdd.push(EMOJIS.EDIT);
+
+    // Add all reactions in parallel for maximum speed
+    if (skipDelays) {
+      const reactionPromises = reactionsToAdd.map(emoji => 
+        message.react(emoji).catch(error => 
+          console.error(`Failed to add emoji ${emoji}:`, error.message)
+        )
+      );
+      await Promise.allSettled(reactionPromises);
+    } else {
+      // Sequential with delays (fallback for rate limiting)
+      for (const emoji of reactionsToAdd) {
+        try {
+          await message.react(emoji);
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (emojiError) {
+          console.error(`Failed to add emoji ${emoji}:`, emojiError.message);
+        }
+      }
     }
     
     console.log(`Successfully added reactions to message`);

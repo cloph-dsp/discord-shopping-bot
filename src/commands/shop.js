@@ -118,19 +118,17 @@ async function handleCreate(interaction) {
   console.log(`Created shopping list message with ID: ${message.id}`);
   // Store the message ID for reaction handling
   storage.setMessageId(channelId, message.id);
-  // Add reactions quickly for better shopping experience
-  setTimeout(async () => {
-    try {
-  await addReactionsToMessage(message, list, { skipDelays: true });
-    } catch (error) {
-      console.error('Error adding reactions:', error);
-      // Try to inform user of the issue
-      await interaction.followUp({ 
-        content: `⚠️ Created list but couldn't add reaction buttons. Bot might be missing "Add Reactions" permission.`,
-        flags: 64 // Ephemeral flag
-      });
-    }
-  }, 1000);
+  // Add reactions immediately for instant shopping experience
+  try {
+    await addReactionsToMessage(message, list, { skipDelays: true });
+  } catch (error) {
+    console.error('Error adding reactions:', error);
+    // Try to inform user of the issue
+    await interaction.followUp({ 
+      content: `⚠️ Created list but couldn't add reaction buttons. Bot might be missing "Add Reactions" permission.`,
+      flags: 64 // Ephemeral flag
+    });
+  }
   // Update the initial reply
   await interaction.editReply({ 
     content: `✅ Created shopping list "${title}" with ${list.items.length} items! Click the number emojis below to check items.`
@@ -241,14 +239,12 @@ async function handleList(interaction) {
   // Update stored message ID
   storage.setMessageId(channelId, message.id);
   
-  // Add reactions quickly for immediate shopping
-  setTimeout(async () => {
-    try {
-      await addReactionsToMessage(message, list);
-    } catch (error) {
-      console.error('Error adding reactions to recalled list:', error);
-    }
-  }, 500);
+  // Add reactions immediately for instant shopping
+  try {
+    await addReactionsToMessage(message, list, { skipDelays: true });
+  } catch (error) {
+    console.error('Error adding reactions to recalled list:', error);
+  }
   
   // Update the ephemeral reply
   await interaction.editReply({ 
