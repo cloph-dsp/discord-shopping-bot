@@ -81,11 +81,25 @@ async function addReactionsToMessage(message, list, options = {}) {
     // Add only missing reactions
     if (toAdd.length > 0) {
       if (skipDelays) {
-        const reactionPromises = toAdd.map(emoji => 
-          message.react(emoji).catch(error => 
-            console.error(`Failed to add emoji ${emoji}:`, error.message)
-          )
-        );
+        const reactionPromises = toAdd.map(async (emoji, index) => {
+          try {
+            // Stagger requests slightly to avoid rate limits
+            await new Promise(resolve => setTimeout(resolve, index * 50));
+            await message.react(emoji);
+          } catch (error) {
+            if (error.code === 429) {
+              console.warn(`Rate limited adding ${emoji}, retrying in ${error.retry_after}ms`);
+              await new Promise(resolve => setTimeout(resolve, error.retry_after || 1000));
+              try {
+                await message.react(emoji);
+              } catch (retryError) {
+                console.error(`Failed to add emoji ${emoji} after retry:`, retryError.message);
+              }
+            } else {
+              console.error(`Failed to add emoji ${emoji}:`, error.message);
+            }
+          }
+        });
         await Promise.allSettled(reactionPromises);
       } else {
         for (const emoji of toAdd) {

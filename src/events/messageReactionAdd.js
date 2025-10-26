@@ -2,12 +2,23 @@ const { Events } = require('discord.js');
 const storage = require('../utils/storage');
 const { EMOJIS, createShoppingListEmbed } = require('../utils/embeds');
 const { addReactionsToMessage } = require('../utils/reactions');
+const messageCache = require('../utils/messageCache');
+
+// ⚠️ DEPRECATED: This reaction handler is kept for backward compatibility only
+// The bot now uses Discord Buttons (see src/events/buttonInteraction.js)
+// This file can be removed once all existing lists have been recreated with buttons
+
+// Track ongoing operations per message to prevent race conditions
+const operationLocks = new Map(); // messageId -> Promise
 
 module.exports = {
   name: Events.MessageReactionAdd,
   execute(reaction, user) {
     // Ignore bot's own reactions
     if (user.bot) return;
+    
+    // Log deprecation warning
+    console.log('[DEPRECATED] Reaction used - consider recreating list with /shop list for button support');
 
     handleReaction(reaction, user);
   },
@@ -25,63 +36,96 @@ async function handleReaction(reaction, user) {
   }
 
   const message = reaction.message;
-  const channelId = message.channel.id;
-  const list = storage.getList(channelId);
-
+  const messageId = message.id;
+  
+  // Find list by message ID
+  const found = storage.getListByMessageId(messageId);
+  
   console.log(`Reaction detected: ${reaction.emoji.name} by ${user.username}`);
-  console.log(`Message ID: ${message.id}, Stored ID: ${list ? list.messageId : 'none'}`);
+  console.log(`Message ID: ${messageId}`);
 
   // Only handle reactions on shopping list messages
-  if (!list || list.messageId !== message.id) {
-    console.log('Ignoring reaction - not a shopping list message or wrong message ID');
+  if (!found) {
+    console.log('Ignoring reaction - not a shopping list message');
     return;
   }
 
+  const { listId, list } = found;
   const emoji = reaction.emoji.name;
-  console.log(`Processing reaction: ${emoji}`);
+  console.log(`Processing reaction: ${emoji} for list: ${list.title}`);
   
-  try {
-    // Handle different types of reactions first (faster response)
-    if (EMOJIS.ITEM.includes(emoji)) {
-      // Item emoji - toggle item checked status
-      const itemIndex = EMOJIS.ITEM.indexOf(emoji);
-      if (itemIndex < list.items.length) {
-        const item = list.items[itemIndex];
-        await handleItemToggle(message, item, channelId, user);
+  // Queue this operation to prevent race conditions
+  const processOperation = async () => {
+    try {
+      // Handle different types of reactions first (faster response)
+      if (EMOJIS.ITEM.includes(emoji)) {
+        // Item emoji - toggle item checked status
+        const itemIndex = EMOJIS.ITEM.indexOf(emoji);
+        if (itemIndex < list.items.length) {
+          const item = list.items[itemIndex];
+          await handleItemToggle(message, item, listId, user);
+        }
+      } else if (emoji === EMOJIS.CLEAR_COMPLETED) {
+        // Clear all completed items
+        await handleClearCompleted(message, listId, user);
+      } else if (emoji === EMOJIS.ADD_ITEM) {
+        // Add new item
+        await handleAddItem(message, listId, user);
+      } else if (emoji === EMOJIS.EDIT) {
+        // Edit mode - show instructions
+        await handleEditMode(message, listId, user);
       }
-    } else if (emoji === EMOJIS.CLEAR_COMPLETED) {
-      // Clear all completed items
-      await handleClearCompleted(message, channelId, user);
-    } else if (emoji === EMOJIS.ADD_ITEM) {
-      // Add new item
-      await handleAddItem(message, channelId, user);
-    } else if (emoji === EMOJIS.EDIT) {
-      // Edit mode - show instructions
-      await handleEditMode(message, channelId, user);
-    }
 
-    // Remove the user's reaction after processing (non-blocking for speed)
-    reaction.users.remove(user.id).catch(err => 
-      console.log('Could not remove reaction (might be missing permissions)')
-    );
-  } catch (error) {
-    console.error('Error handling reaction:', error);
+      // Remove the user's reaction after processing (non-blocking for speed)
+      reaction.users.remove(user.id).catch(err => 
+        console.log('Could not remove reaction (might be missing permissions)')
+      );
+    } catch (error) {
+      console.error('Error handling reaction:', error);
+    }
+  };
+
+  // Wait for any ongoing operation on this message to complete first
+  const existingOperation = operationLocks.get(messageId);
+  if (existingOperation) {
+    console.log(`⏳ Queuing operation - waiting for previous operation to complete`);
+    const chainedOperation = existingOperation.then(processOperation);
+    operationLocks.set(messageId, chainedOperation);
+    
+    // Clean up lock after this chained operation completes
+    chainedOperation.finally(() => {
+      // Only delete if this is still the last operation
+      if (operationLocks.get(messageId) === chainedOperation) {
+        operationLocks.delete(messageId);
+      }
+    });
+  } else {
+    const newOperation = processOperation();
+    operationLocks.set(messageId, newOperation);
+    
+    // Clean up lock after completion
+    newOperation.finally(() => {
+      // Only delete if this is still the last operation
+      if (operationLocks.get(messageId) === newOperation) {
+        operationLocks.delete(messageId);
+      }
+    });
   }
 }
 
-async function handleItemToggle(message, item, channelId, user) {
+async function handleItemToggle(message, item, listId, user) {
   const wasChecked = item.checked;
-  storage.toggleItemChecked(channelId, item.id);
-  await updateShoppingListMessage(message, channelId);
+  storage.toggleItemChecked(listId, item.id);
+  await updateShoppingListMessage(message, listId);
   
   const status = wasChecked ? 'unchecked' : 'checked';
   const emoji = wasChecked ? '⬜' : '✅';
   await message.channel.send(`${emoji} ${user.username} ${status}: **${item.text}**`);
 }
 
-async function handleClearCompleted(message, channelId, user) {
-  const clearedCount = storage.clearCompletedItems(channelId);
-  await updateShoppingListMessage(message, channelId);
+async function handleClearCompleted(message, listId, user) {
+  const clearedCount = storage.clearCompletedItems(listId);
+  await updateShoppingListMessage(message, listId);
   
   if (clearedCount > 0) {
     await message.channel.send(`🧹 ${user.username} cleared ${clearedCount} completed item${clearedCount === 1 ? '' : 's'}!`);
@@ -90,7 +134,7 @@ async function handleClearCompleted(message, channelId, user) {
   }
 }
 
-async function handleAddItem(message, channelId, user) {
+async function handleAddItem(message, listId, user) {
   await message.channel.send(
     `➕ ${user.username}, what would you like to add to the shopping list?\n*Separate multiple items with semicolons (;). Type \`cancel\` to cancel.*`
   );
@@ -116,7 +160,7 @@ async function handleAddItem(message, channelId, user) {
     let addedItems = [];
     for (const item of items) {
       try {
-        storage.addItem(channelId, item);
+        storage.addItem(listId, item);
         addedItems.push(item);
       } catch (err) {
         console.error('Error adding item', item, err);
@@ -126,7 +170,7 @@ async function handleAddItem(message, channelId, user) {
     
     // Update the shopping list message sequentially
     try {
-      await updateShoppingListMessage(message, channelId);
+      await updateShoppingListMessage(message, listId);
     } catch (err) {
       console.error('Error updating shopping list after add:', err);
       await m.reply('⚠️ Could not refresh the shopping list after adding items.');
@@ -146,8 +190,8 @@ async function handleAddItem(message, channelId, user) {
   });
 }
 
-async function handleEditMode(message, channelId, user) {
-  const list = storage.getList(channelId);
+async function handleEditMode(message, listId, user) {
+  const list = storage.getList(listId);
   if (!list || list.items.length === 0) return;
 
   let editText = `✏️ ${user.username}, which item would you like to edit?\n\n`;
@@ -177,7 +221,7 @@ async function handleEditMode(message, channelId, user) {
       const item = list.items[itemIndex];
       await editMessage.delete();
       await m.delete();
-      await handleEditItem(message, item, channelId, user);
+      await handleEditItem(message, item, listId, user);
     } else {
       await m.reply('❌ Invalid choice. Please try again.');
     }
@@ -191,7 +235,7 @@ async function handleEditMode(message, channelId, user) {
   });
 }
 
-async function handleEditItem(message, item, channelId, user) {
+async function handleEditItem(message, item, listId, user) {
   await message.channel.send(
     `✏️ ${user.username}, enter the new text for: **${item.text}**\n*Type \`cancel\` to cancel editing.*`
   );
@@ -206,8 +250,8 @@ async function handleEditItem(message, item, channelId, user) {
     }
     
     const oldText = item.text;
-    storage.editItem(channelId, item.id, m.content);
-    await updateShoppingListMessage(message, channelId);
+    storage.editItem(listId, item.id, m.content);
+    await updateShoppingListMessage(message, listId);
     await m.reply(`✏️ Updated "${oldText}" → "${m.content}"`);
   });
   
@@ -220,8 +264,8 @@ async function handleEditItem(message, item, channelId, user) {
 
 
 
-async function updateShoppingListMessage(message, channelId) {
-  const list = storage.getList(channelId);
+async function updateShoppingListMessage(message, listId) {
+  const list = storage.getList(listId);
   if (!list) return;
 
   const embed = createShoppingListEmbed(list);
@@ -229,6 +273,8 @@ async function updateShoppingListMessage(message, channelId) {
   try {
     // Update message content immediately
     await message.edit({ embeds: [embed] });
+    messageCache.updateCache(message);
+    
     // Re-add reactions immediately with no delays
     try {
       await addReactionsToMessage(message, list, { skipDelays: true });
@@ -237,5 +283,12 @@ async function updateShoppingListMessage(message, channelId) {
     }
   } catch (error) {
     console.error('Error updating shopping list message:', error);
+    
+    // If message no longer exists, clear the reference
+    if (error.code === 10008) {
+      console.log('Message was deleted, clearing reference');
+      storage.clearListMessage(listId);
+      messageCache.invalidate(message.id);
+    }
   }
 }

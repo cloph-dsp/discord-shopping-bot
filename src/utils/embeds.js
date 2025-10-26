@@ -21,44 +21,61 @@ const EMOJIS = {
 };
 
 function createShoppingListEmbed(list) {
+  const checkedItems = list.items.filter(item => item.checked);
+  const totalItems = list.items.length;
+  const isComplete = totalItems > 0 && checkedItems.length === totalItems;
+  
+  // Dynamic color based on completion status
+  let embedColor;
+  if (totalItems === 0) {
+    embedColor = 0x99AAB5; // Gray - empty list
+  } else if (isComplete) {
+    embedColor = 0x57F287; // Green - all done!
+  } else if (checkedItems.length > 0) {
+    embedColor = 0xFEE75C; // Yellow - in progress
+  } else {
+    embedColor = 0x5865F2; // Blurple - fresh list
+  }
+  
   const embed = new EmbedBuilder()
     .setTitle(`🛒 ${list.title}`)
-    .setColor(0x00AE86)
+    .setColor(embedColor)
     .setTimestamp();
 
-  if (list.items.length === 0) {
-    embed.setDescription('*Your shopping list is empty. Add some items with `/shop add`!*');
-    embed.setFooter({ text: 'Use /shop add <item> to add items to your list' });
+  if (totalItems === 0) {
+    embed.setDescription('*Your shopping list is empty. Add some items to get started!*');
+    embed.setFooter({ text: '⬇️ Click the "Add Items" button below or use /shop add' });
     return embed;
   }
 
   let description = '';
-  const checkedItems = list.items.filter(item => item.checked);
-  const uncheckedItems = list.items.filter(item => !item.checked);
 
-  // Show all items with their unique emoji (up to 50) - improved formatting
+  // Show all items with improved formatting
   list.items.forEach((item, index) => {
-    const itemEmoji = EMOJIS.ITEM[index] || '❓';
-    const itemText = item.checked ? `~~**${item.text}**~~` : `**${item.text}**`;
     const status = item.checked ? '✅' : '⬜';
+    const itemText = item.checked ? `~~${item.text}~~` : item.text;
     
-    // Add extra spacing and larger text formatting
-    description += `\n${itemEmoji}  ${status}  ${itemText}\n`;
+    description += `${index + 1}. ${status} ${itemText}\n`;
   });
 
-  // Remove empty lines at the end
-  description = description.trim();
+  embed.setDescription(description.trim());
 
-  embed.setDescription(description);
-
-  // Add footer with instructions
-  let instructions = 'Click number emojis to check/uncheck items';
-  if (checkedItems.length > 0) {
-    instructions += ` • ${EMOJIS.CLEAR_COMPLETED} Clear completed`;
-  }
-  instructions += ` • ${EMOJIS.ADD_ITEM} Add item • ${EMOJIS.EDIT} Edit`;
+  // Enhanced footer with completion status and instructions
+  const completionText = `${checkedItems.length}/${totalItems} items checked`;
+  let footerText = completionText;
   
-  embed.setFooter({ text: instructions });
+  if (isComplete) {
+    footerText = `✨ ${completionText} - All done!`;
+  } else if (checkedItems.length > 0) {
+    footerText = `📝 ${completionText} - Keep going!`;
+  } else {
+    footerText = `🛒 ${completionText} - Let's shop!`;
+  }
+  
+  // Add interaction hints
+  footerText += ` • Click buttons below to interact`;
+  
+  embed.setFooter({ text: footerText });
 
   return embed;
 }
@@ -66,34 +83,44 @@ function createShoppingListEmbed(list) {
 function createInstructionEmbed() {
   const embed = new EmbedBuilder()
     .setTitle('🛒 Shopping List Bot')
-    .setColor(0x0099FF)
-    .setDescription('Create and manage interactive shopping lists with emoji reactions!')
+    .setColor(0x5865F2)
+    .setDescription('Create and manage interactive shopping lists with buttons!')
     .addFields(
       {
         name: '📝 Getting Started',
-        value: `1. Set a shopping channel: \`/shop channel #your-channel\`
-                2. Create a list: \`/shop create "My List" milk;bread;eggs\`
-                3. Use emoji reactions to interact with items`,
+        value: '1. Create a list: `/shop create "My List" milk;bread;eggs`\n' +
+               '2. Click buttons to interact with items\n' +
+               '3. Lists can be displayed in any channel!',
         inline: false
       },
       {
         name: '🎯 How It Works',
-        value: `1️⃣2️⃣3️⃣ **Click numbers**: Check/uncheck items (becomes ~~strikethrough~~)
-                ${EMOJIS.CLEAR_COMPLETED} **Clear completed**: Remove all checked items at once
-                ${EMOJIS.ADD_ITEM} **Add item**: Add new items quickly
-                ${EMOJIS.EDIT} **Edit**: Modify existing items`,
+        value: '**Item Buttons** - Click to check/uncheck items\n' +
+               '**➕ Add** - Add new items quickly\n' +
+               '**🧹 Clear Done** - Remove all completed items\n' +
+               '**✏️ Edit** - Modify existing items\n' +
+               '**🔄 Refresh** - Update the list display',
         inline: false
       },
       {
-        name: '📋 Commands',
-        value: `\`/shop create <title> [items]\` - Create new shopping list
-                \`/shop add <item> [quantity]\` - Add item to list
-                \`/shop list\` - Show current list
-                \`/shop clear\` - Clear the list
-                \`/shop channel <channel>\` - Set shopping channel`,
+        name: '📋 Main Commands',
+        value: '`/shop create <title> [items]` - Create new list\n' +
+               '`/shop list [title]` - Display a list (with autocomplete)\n' +
+               '`/shop lists` - Show all your lists\n' +
+               '`/shop add <item>` - Add items to active list\n' +
+               '`/shop clear` - Clear the active list',
+        inline: false
+      },
+      {
+        name: '💡 Tips',
+        value: '• Lists work in any channel\n' +
+               '• Use semicolons to add multiple items: `milk;bread;eggs`\n' +
+               '• Embed colors change based on progress\n' +
+               '• Up to 20 items can have buttons (more items shown in text)',
         inline: false
       }
     )
+    .setFooter({ text: 'Enjoy your shopping! 🎉' })
     .setTimestamp();
 
   return embed;

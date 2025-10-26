@@ -1,0 +1,307 @@
+const { Events } = require('discord.js');
+const storage = require('../utils/storage');
+const { createShoppingListEmbed } = require('../utils/embeds');
+const { createShoppingListButtons, disableAllButtons } = require('../utils/buttons');
+const messageCache = require('../utils/messageCache');
+
+// Track ongoing operations per message to prevent race conditions
+const operationLocks = new Map(); // messageId -> Promise
+
+module.exports = {
+  name: Events.InteractionCreate,
+  async execute(interaction) {
+    // Only handle button interactions
+    if (!interaction.isButton()) return;
+    
+    const messageId = interaction.message.id;
+    
+    // Find list by message ID
+    const found = storage.getListByMessageId(messageId);
+    
+    if (!found) {
+      return interaction.reply({ 
+        content: '❌ This shopping list no longer exists.',
+        flags: 64 
+      });
+    }
+    
+    const { listId, list } = found;
+    
+    console.log(`[BUTTON] ${interaction.user.tag} clicked: ${interaction.customId} on list: ${list.title}`);
+    
+    // Queue this operation to prevent race conditions
+    const processOperation = async () => {
+      try {
+        if (interaction.customId.startsWith('toggle_')) {
+          await handleToggleItem(interaction, listId, list);
+        } else if (interaction.customId === 'clear_completed') {
+          await handleClearCompleted(interaction, listId, list);
+        } else if (interaction.customId === 'add_item') {
+          await handleAddItem(interaction, listId, list);
+        } else if (interaction.customId === 'edit_item') {
+          await handleEditItem(interaction, listId, list);
+        } else if (interaction.customId === 'refresh_list') {
+          await handleRefresh(interaction, listId);
+        }
+      } catch (error) {
+        console.error('Error handling button interaction:', error);
+        
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({ 
+            content: '❌ An error occurred while processing your request.',
+            flags: 64 
+          }).catch(() => {});
+        }
+      }
+    };
+    
+    // Wait for any ongoing operation on this message to complete first
+    const existingOperation = operationLocks.get(messageId);
+    if (existingOperation) {
+      console.log(`⏳ Queuing button operation - waiting for previous operation to complete`);
+      const chainedOperation = existingOperation.then(processOperation);
+      operationLocks.set(messageId, chainedOperation);
+      
+      // Clean up lock after this chained operation completes
+      chainedOperation.finally(() => {
+        if (operationLocks.get(messageId) === chainedOperation) {
+          operationLocks.delete(messageId);
+        }
+      });
+    } else {
+      const newOperation = processOperation();
+      operationLocks.set(messageId, newOperation);
+      
+      // Clean up lock after completion
+      newOperation.finally(() => {
+        if (operationLocks.get(messageId) === newOperation) {
+          operationLocks.delete(messageId);
+        }
+      });
+    }
+  },
+};
+
+async function handleToggleItem(interaction, listId, list) {
+  const itemId = interaction.customId.split('_')[1];
+  const item = list.items.find(i => i.id === itemId);
+  
+  if (!item) {
+    return interaction.reply({ 
+      content: '❌ Item not found.',
+      flags: 64 
+    });
+  }
+  
+  // Toggle item
+  storage.toggleItemChecked(listId, itemId);
+  
+  // Update message
+  await updateListMessage(interaction, listId);
+  
+  // Send ephemeral feedback
+  const status = item.checked ? 'unchecked' : 'checked';
+  const emoji = item.checked ? '⬜' : '✅';
+  await interaction.followUp({ 
+    content: `${emoji} ${status.charAt(0).toUpperCase() + status.slice(1)}: **${item.text}**`,
+    flags: 64 
+  });
+}
+
+async function handleClearCompleted(interaction, listId, list) {
+  const clearedCount = storage.clearCompletedItems(listId);
+  
+  // Update message
+  await updateListMessage(interaction, listId);
+  
+  // Send feedback
+  if (clearedCount > 0) {
+    await interaction.followUp({ 
+      content: `🧹 Cleared ${clearedCount} completed item${clearedCount === 1 ? '' : 's'}!`,
+      flags: 64 
+    });
+  } else {
+    await interaction.followUp({ 
+      content: 'No completed items to clear.',
+      flags: 64 
+    });
+  }
+}
+
+async function handleAddItem(interaction, listId, list) {
+  await interaction.reply({
+    content: '➕ What would you like to add to the shopping list?\n*Separate multiple items with semicolons (;). Reply within 30 seconds.*',
+    flags: 64
+  });
+  
+  const filter = m => m.author.id === interaction.user.id;
+  const collector = interaction.channel.createMessageCollector({ filter, time: 30000, max: 1 });
+  
+  collector.on('collect', async m => {
+    // Parse multiple items separated by semicolons
+    const items = m.content.split(';').map(item => item.trim()).filter(item => item.length > 0);
+    
+    if (items.length === 0) {
+      await m.reply('❌ Please provide at least one valid item.');
+      return;
+    }
+    
+    // Add each item
+    let addedItems = [];
+    for (const item of items) {
+      try {
+        storage.addItem(listId, item);
+        addedItems.push(item);
+      } catch (err) {
+        console.error('Error adding item', item, err);
+      }
+    }
+    
+    // Update the shopping list message
+    try {
+      const message = await messageCache.getMessage(interaction.channel, list.messageId);
+      if (message) {
+        const updatedList = storage.getList(listId);
+        const embed = createShoppingListEmbed(updatedList);
+        const buttons = createShoppingListButtons(updatedList);
+        await message.edit({ embeds: [embed], components: buttons });
+        messageCache.updateCache(message);
+      }
+    } catch (err) {
+      console.error('Error updating shopping list after add:', err);
+    }
+    
+    // Send summary
+    const resultText = addedItems.length === 1 
+      ? `➕ Added "${addedItems[0]}" to the shopping list!`
+      : `➕ Added ${addedItems.length} items to the shopping list:\n• ${addedItems.join('\n• ')}`;
+    await m.reply(resultText);
+  });
+  
+  collector.on('end', (collected, reason) => {
+    if (reason === 'time') {
+      interaction.followUp({ 
+        content: '⏰ Add timeout. Use the button again to try.',
+        flags: 64 
+      }).catch(() => {});
+    }
+  });
+}
+
+async function handleEditItem(interaction, listId, list) {
+  if (list.items.length === 0) {
+    return interaction.reply({ 
+      content: '❌ No items to edit.',
+      flags: 64 
+    });
+  }
+  
+  let editText = '✏️ Which item would you like to edit?\n\n';
+  list.items.forEach((item, index) => {
+    const status = item.checked ? '✅' : '⬜';
+    const text = item.checked ? `~~${item.text}~~` : item.text;
+    editText += `**${index + 1}.** ${status} ${text}\n`;
+  });
+  editText += `\nReply with a number (1-${list.items.length}), or "cancel" to cancel.`;
+  
+  await interaction.reply({ content: editText, flags: 64 });
+  
+  const filter = m => m.author.id === interaction.user.id;
+  const collector = interaction.channel.createMessageCollector({ filter, time: 30000, max: 1 });
+  
+  collector.on('collect', async m => {
+    const choice = m.content.trim().toLowerCase();
+    
+    if (choice === 'cancel') {
+      await m.reply('❌ Edit cancelled.');
+      return;
+    }
+    
+    const itemIndex = parseInt(choice) - 1;
+    if (itemIndex >= 0 && itemIndex < list.items.length) {
+      const item = list.items[itemIndex];
+      await handleEditItemText(interaction, m, item, listId);
+    } else {
+      await m.reply('❌ Invalid choice. Please try again.');
+    }
+  });
+  
+  collector.on('end', (collected, reason) => {
+    if (reason === 'time') {
+      interaction.followUp({ 
+        content: '⏰ Edit timeout.',
+        flags: 64 
+      }).catch(() => {});
+    }
+  });
+}
+
+async function handleEditItemText(interaction, choiceMessage, item, listId) {
+  await choiceMessage.reply(
+    `✏️ Enter the new text for: **${item.text}**\n*Type \`cancel\` to cancel editing.*`
+  );
+  
+  const filter = m => m.author.id === interaction.user.id;
+  const collector = interaction.channel.createMessageCollector({ filter, time: 30000, max: 1 });
+  
+  collector.on('collect', async m => {
+    if (m.content.toLowerCase() === 'cancel') {
+      await m.reply('❌ Edit cancelled.');
+      return;
+    }
+    
+    const oldText = item.text;
+    storage.editItem(listId, item.id, m.content);
+    
+    // Update the list message
+    const list = storage.getList(listId);
+    const message = await messageCache.getMessage(interaction.channel, list.messageId);
+    if (message) {
+      const embed = createShoppingListEmbed(list);
+      const buttons = createShoppingListButtons(list);
+      await message.edit({ embeds: [embed], components: buttons });
+      messageCache.updateCache(message);
+    }
+    
+    await m.reply(`✏️ Updated "${oldText}" → "${m.content}"`);
+  });
+  
+  collector.on('end', (collected, reason) => {
+    if (reason === 'time') {
+      interaction.followUp({ 
+        content: '⏰ Edit timeout.',
+        flags: 64 
+      }).catch(() => {});
+    }
+  });
+}
+
+async function handleRefresh(interaction, listId) {
+  await updateListMessage(interaction, listId);
+  await interaction.followUp({ 
+    content: '🔄 List refreshed!',
+    flags: 64 
+  });
+}
+
+async function updateListMessage(interaction, listId) {
+  const list = storage.getList(listId);
+  if (!list) return;
+  
+  const embed = createShoppingListEmbed(list);
+  const buttons = createShoppingListButtons(list);
+  
+  try {
+    await interaction.update({ embeds: [embed], components: buttons });
+    messageCache.updateCache(interaction.message);
+  } catch (error) {
+    console.error('Error updating list message:', error);
+    
+    // If message no longer exists, clear the reference
+    if (error.code === 10008) {
+      console.log('Message was deleted, clearing reference');
+      storage.clearListMessage(listId);
+      messageCache.invalidate(interaction.message.id);
+    }
+  }
+}

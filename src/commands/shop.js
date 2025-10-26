@@ -1,7 +1,8 @@
 const { SlashCommandBuilder } = require('discord.js');
 const storage = require('../utils/storage');
-const { EMOJIS, createShoppingListEmbed, createInstructionEmbed } = require('../utils/embeds');
-const { addReactionsToMessage } = require('../utils/reactions');
+const { createShoppingListEmbed, createInstructionEmbed } = require('../utils/embeds');
+const { createShoppingListButtons } = require('../utils/buttons');
+const messageCache = require('../utils/messageCache');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -43,15 +44,11 @@ module.exports = {
     .addSubcommand(subcommand =>
       subcommand
         .setName('clear')
-        .setDescription('Clear the current shopping list'))
+        .setDescription('Clear items from the active shopping list'))
     .addSubcommand(subcommand =>
       subcommand
-        .setName('channel')
-        .setDescription('Set the shopping list channel')
-        .addChannelOption(option =>
-          option.setName('channel')
-            .setDescription('Channel for shopping lists')
-            .setRequired(true)))
+        .setName('lists')
+        .setDescription('Show all available shopping lists'))
     .addSubcommand(subcommand =>
       subcommand
         .setName('help')
@@ -73,8 +70,8 @@ module.exports = {
       case 'clear':
         await handleClear(interaction);
         break;
-      case 'channel':
-        await handleChannel(interaction);
+      case 'lists':
+        await handleLists(interaction);
         break;
       case 'help':
         await handleHelp(interaction);
@@ -98,10 +95,16 @@ async function handleCreate(interaction) {
   const title = interaction.options.getString('title');
   const itemsString = interaction.options.getString('items');
   const channelId = interaction.channel.id;
-  const guildId = interaction.guild.id;
-
 
   await interaction.deferReply({ flags: 64 });
+
+  // Check if list with this title already exists
+  const existingList = storage.getListByTitle(title);
+  if (existingList) {
+    return interaction.editReply({ 
+      content: `❌ A list named "${title}" already exists. Choose a different name or use \`/shop list "${title}"\` to display it.`
+    });
+  }
 
   // Parse items
   let items = [];
@@ -110,28 +113,26 @@ async function handleCreate(interaction) {
   }
 
   // Create the shopping list
-  const list = storage.createList(channelId, title, items);
-  // Create and send the embed as a regular message (not interaction reply)
+  const list = storage.createList(title, items);
+  
+  // Set as active list for this channel
+  storage.setActiveList(channelId, list.id);
+  
+  // Create and send the embed with buttons
   const embed = createShoppingListEmbed(list);
-  // Send the actual shopping list as a separate message
-  const message = await interaction.channel.send({ embeds: [embed] });
+  const buttons = createShoppingListButtons(list);
+  
+  // Send the shopping list as a separate message with buttons
+  const message = await interaction.channel.send({ embeds: [embed], components: buttons });
   console.log(`Created shopping list message with ID: ${message.id}`);
-  // Store the message ID for reaction handling
-  storage.setMessageId(channelId, message.id);
-  // Add reactions immediately for instant shopping experience
-  try {
-    await addReactionsToMessage(message, list, { skipDelays: true });
-  } catch (error) {
-    console.error('Error adding reactions:', error);
-    // Try to inform user of the issue
-    await interaction.followUp({ 
-      content: `⚠️ Created list but couldn't add reaction buttons. Bot might be missing "Add Reactions" permission.`,
-      flags: 64 // Ephemeral flag
-    });
-  }
+  
+  // Store the message ID for button handling
+  storage.setMessageId(list.id, message.id);
+  messageCache.updateCache(message);
+  
   // Update the initial reply
   await interaction.editReply({ 
-    content: `✅ Created shopping list "${title}" with ${list.items.length} items! Click the number emojis below to check items.`
+    content: `✅ Created shopping list "${title}" with ${list.items.length} items! This list is now active in this channel.`
   });
 }
 
@@ -141,69 +142,103 @@ async function handleAdd(interaction) {
   const quantity = interaction.options.getInteger('quantity') || 1;
   const channelId = interaction.channel.id;
 
-  const list = storage.getList(channelId);
-  if (!list) {
+  // Get active list in this channel
+  const active = storage.getActiveList(channelId);
+  if (!active) {
+    const titles = storage.getAllListTitles();
+    if (titles.length === 0) {
+      return interaction.editReply({ 
+        content: '❌ No shopping lists exist. Create one first with `/shop create`'
+      });
+    }
     return interaction.editReply({ 
-      content: '❌ No shopping list found in this channel. Create one first with `/shop create`',
-      flags: 64 
+      content: `❌ No active list in this channel. Use \`/shop list "${titles[0]}"\` to display a list here first.`
     });
   }
+
+  const { listId, list } = active;
 
   // Parse multiple items separated by semicolons
   const items = itemInput.split(';').map(item => item.trim()).filter(item => item.length > 0);
   
   if (items.length === 0) {
     return interaction.editReply({ 
-      content: '❌ Please provide at least one valid item.',
-      flags: 64 
+      content: '❌ Please provide at least one valid item.'
     });
   }
 
   // Add each item to the list
   let addedItems = [];
   for (const item of items) {
-    storage.addItem(channelId, item, quantity);
+    storage.addItem(listId, item, quantity);
     const itemText = quantity > 1 ? `${item} (${quantity})` : item;
     addedItems.push(itemText);
   }
 
   // Update the shopping list message
-  const message = await interaction.channel.messages.fetch(list.messageId);
-  const embed = createShoppingListEmbed(storage.getList(channelId));
-  await message.edit({ embeds: [embed] });
-  // Re-add reactions
-  await addReactionsToMessage(message, storage.getList(channelId), { skipDelays: true });
+  const message = await messageCache.getMessage(interaction.channel, list.messageId);
+  
+  if (!message) {
+    // Message was deleted, clear the reference
+    storage.clearListMessage(listId);
+    return interaction.editReply({ 
+      content: `⚠️ The shopping list message was deleted. Items were added, but you'll need to use \`/shop list\` to display the list again.`
+    });
+  }
+  
+  const updatedList = storage.getList(listId);
+  const embed = createShoppingListEmbed(updatedList);
+  const buttons = createShoppingListButtons(updatedList);
+  await message.edit({ embeds: [embed], components: buttons });
+  messageCache.updateCache(message);
   
   const resultText = items.length === 1 
-    ? `✅ Added "${addedItems[0]}" to the shopping list!`
-    : `✅ Added ${items.length} items to the shopping list:\n• ${addedItems.join('\n• ')}`;
+    ? `✅ Added "${addedItems[0]}" to ${list.title}!`
+    : `✅ Added ${items.length} items to ${list.title}:\n• ${addedItems.join('\n• ')}`;
     
   await interaction.editReply({ 
-    content: resultText,
-    flags: 64 
+    content: resultText
   });
 }
 
 async function handleList(interaction) {
   // Defer immediately to avoid timeout
-  await interaction.deferReply({ flags: 64 });
+  try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: 64 });
+    }
+  } catch (deferError) {
+    console.error('Failed to defer reply:', deferError);
+    // If defer fails, try immediate reply
+    try {
+      if (!interaction.replied) {
+        await interaction.reply({ content: '⚠️ Processing...', flags: 64 });
+      }
+    } catch (replyError) {
+      console.error('Failed to reply at all:', replyError);
+      return;
+    }
+  }
   
-  // Determine target list: by title or current channel
+  // Determine target list: by title or current channel's active list
   const titleOption = interaction.options.getString('title');
-  let channelId, list, targetChannel;
+  const channelId = interaction.channel.id;
+  let listId, list;
+  
   if (titleOption) {
     const found = storage.getListByTitle(titleOption);
     if (!found) {
       const titles = storage.getAllListTitles();
       return interaction.editReply({ content: `❌ No list titled "${titleOption}". Available titles: ${titles.join(', ')}` });
     }
-    channelId = found.channelId;
+    listId = found.listId;
     list = found.list;
-    targetChannel = interaction.client.channels.cache.get(channelId) || interaction.channel;
   } else {
-    targetChannel = interaction.channel;
-    channelId = targetChannel.id;
-    list = storage.getList(channelId);
+    const active = storage.getActiveList(channelId);
+    if (active) {
+      listId = active.listId;
+      list = active.list;
+    }
   }
 
   if (!list) {
@@ -212,91 +247,119 @@ async function handleList(interaction) {
       return interaction.editReply({ content: '❌ No lists exist. Create one with `/shop create`' });
     }
     return interaction.editReply({ 
-      content: `❌ No shopping list found. Available titles: ${titles.join(', ')}`
+      content: `❌ No active list in this channel.\n\n**Available lists:**\n${titles.map(t => `• ${t}`).join('\n')}\n\nUse \`/shop list "${titles[0]}"\` to display one.`
     });
   }
   
+  // Set as active list for this channel
+  storage.setActiveList(channelId, listId);
+  
   // Update acknowledgment
   await interaction.editReply({ 
-    content: `🔄 Recalling shopping list "${list.title}" from ${targetChannel}...`
+    content: `🔄 Displaying "${list.title}"...`
   });
   
   // Delete old message if it exists
   if (list.messageId) {
     try {
-      const oldMessage = await targetChannel.messages.fetch(list.messageId);
-      await oldMessage.delete();
-      console.log('Deleted old shopping list message');
+      const oldChannel = list.channelId ? interaction.client.channels.cache.get(list.channelId) : interaction.channel;
+      if (oldChannel) {
+        const oldMessage = await messageCache.getMessage(oldChannel, list.messageId);
+        if (oldMessage) {
+          await oldMessage.delete();
+          console.log('Deleted old shopping list message');
+        }
+        messageCache.invalidate(list.messageId);
+      }
     } catch (error) {
       console.log('Could not delete old message (might already be deleted)');
+      messageCache.invalidate(list.messageId);
     }
   }
   
   const embed = createShoppingListEmbed(list);
+  const buttons = createShoppingListButtons(list);
   
-  // Send new public message with the shopping list
-  const message = await targetChannel.send({ embeds: [embed] });
+  // Send new public message with the shopping list and buttons
+  const message = await interaction.channel.send({ embeds: [embed], components: buttons });
   
-  // Update stored message ID
-  storage.setMessageId(channelId, message.id);
-  
-  // Add reactions immediately for instant shopping
-  try {
-    await addReactionsToMessage(message, list, { skipDelays: true });
-  } catch (error) {
-    console.error('Error adding reactions to recalled list:', error);
-  }
+  // Update stored message ID and cache
+  storage.setMessageId(listId, message.id);
+  messageCache.updateCache(message);
   
   // Update the ephemeral reply
   await interaction.editReply({ 
-    content: `✅ Shopping list "${list.title}" recalled in ${targetChannel} and updated with fresh emoji buttons!`
+    content: `✅ "${list.title}" is now active in this channel!`
   });
 }
 
 async function handleClear(interaction) {
   await interaction.deferReply({ flags: 64 });
   const channelId = interaction.channel.id;
-  const list = storage.getList(channelId);
-  if (!list) {
+  const active = storage.getActiveList(channelId);
+  
+  if (!active) {
     return interaction.editReply({ 
-      content: '❌ No shopping list found in this channel.',
-      flags: 64 
+      content: '❌ No active shopping list in this channel.'
     });
   }
-  storage.clearList(channelId);
+  
+  const { listId, list } = active;
+  storage.clearList(listId);
+  
   // Update the message
   if (list.messageId) {
     try {
-      const message = await interaction.channel.messages.fetch(list.messageId);
-      const embed = createShoppingListEmbed(storage.getList(channelId));
-      await message.edit({ embeds: [embed] });
-      await message.reactions.removeAll();
+      const message = await messageCache.getMessage(interaction.channel, list.messageId);
+      if (message) {
+        const updatedList = storage.getList(listId);
+        const embed = createShoppingListEmbed(updatedList);
+        const buttons = createShoppingListButtons(updatedList);
+        await message.edit({ embeds: [embed], components: buttons });
+        messageCache.updateCache(message);
+      } else {
+        // Message was deleted
+        storage.clearListMessage(listId);
+      }
     } catch (error) {
       console.error('Error updating message after clear:', error);
     }
   }
   await interaction.editReply({ 
-    content: '✅ Shopping list cleared!',
-    flags: 64 
+    content: `✅ Cleared all items from "${list.title}"!`
   });
 }
 
-async function handleChannel(interaction) {
+async function handleLists(interaction) {
   await interaction.deferReply({ flags: 64 });
-  const channel = interaction.options.getChannel('channel');
-  const guildId = interaction.guild.id;
-  // Check if user has permission to manage channels
-  if (!interaction.member.permissions.has('MANAGE_CHANNELS')) {
+  
+  const allLists = storage.getAllLists();
+  
+  if (allLists.length === 0) {
     return interaction.editReply({ 
-      content: '❌ You need the "Manage Channels" permission to set the shopping channel.',
-      flags: 64 
+      content: '📝 No shopping lists exist yet.\n\nCreate your first list with `/shop create "My List"`'
     });
   }
-  storage.setShoppingChannel(guildId, channel.id);
-  await interaction.editReply({ 
-    content: `✅ Set ${channel} as the shopping list channel!`,
-    flags: 64 
+  
+  const channelId = interaction.channel.id;
+  const active = storage.getActiveList(channelId);
+  
+  let listText = `📋 **Available Shopping Lists** (${allLists.length})\n\n`;
+  
+  allLists.forEach(({ listId, list }) => {
+    const isActive = active && active.listId === listId;
+    const itemCount = list.items.length;
+    const checkedCount = list.items.filter(i => i.checked).length;
+    const status = itemCount === 0 ? '📝 Empty' : `${checkedCount}/${itemCount} complete`;
+    const marker = isActive ? '🔹 **' : '▫️ ';
+    const endMarker = isActive ? '** (active here)' : '';
+    
+    listText += `${marker}${list.title}${endMarker} - ${status}\n`;
   });
+  
+  listText += `\n💡 Use \`/shop list "ListName"\` to display a list in this channel.`;
+  
+  await interaction.editReply({ content: listText });
 }
 
 async function handleHelp(interaction) {

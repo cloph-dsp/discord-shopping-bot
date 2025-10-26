@@ -89,5 +89,42 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
+// Handle connection errors and resilience
+client.on('error', error => {
+  console.error('Discord client error:', error);
+});
+
+client.on('warn', info => {
+  console.warn('Discord client warning:', info);
+});
+
+client.on('shardError', error => {
+  console.error('WebSocket connection error:', error);
+});
+
+client.on('shardReady', (id, unavailableGuilds) => {
+  console.log(`Shard ${id} ready! ${unavailableGuilds?.size || 0} guilds unavailable`);
+});
+
+client.on('shardDisconnect', (event, id) => {
+  console.warn(`Shard ${id} disconnected (code: ${event.code})`);
+});
+
+client.on('shardReconnecting', id => {
+  console.log(`Shard ${id} reconnecting...`);
+});
+
+client.on('shardResume', (id, replayedEvents) => {
+  console.log(`Shard ${id} resumed (replayed ${replayedEvents} events)`);
+});
+
+// Auto-reconnect on disconnect
+client.on('disconnect', () => {
+  console.warn('Bot disconnected, attempting to reconnect...');
+});
+
 // Login to Discord with your client's token
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN).catch(error => {
+  console.error('Failed to login to Discord:', error);
+  process.exit(1);
+});

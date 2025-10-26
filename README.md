@@ -4,10 +4,11 @@ A Discord bot that creates interactive shopping lists using emoji reactions for 
 
 ## Features
 
-- 🛒 **Interactive Shopping Lists**: Create shopping lists with emoji reactions
+- 🛒 **Interactive Shopping Lists**: Create and manage multiple shopping lists
 - ✅ **Two-Step Checking**: First click marks item as "in cart", second click removes from list
 - 📝 **Slash Commands**: Modern Discord slash command interface
-- 🏪 **Channel Management**: Set specific channels for shopping lists
+- 📋 **Multi-List Support**: Create multiple lists and switch between them in any channel
+- 🏪 **Smart Channel Tracking**: Each channel remembers its last active list
 - 👥 **Multi-User**: Multiple users can interact with the same shopping list
 
 ## Emoji System
@@ -20,12 +21,11 @@ A Discord bot that creates interactive shopping lists using emoji reactions for 
 ## Commands
 
 - `/shop create <title> [items]` - Create a new shopping list
-- `/shop add <item> [quantity]` - Add item(s) to current shopping list (separate multiple with `;`)
- - `/shop list [title]` - Display a shopping list by title or the current channel's list if no title is provided
-- `/shop clear` - Clear the current shopping list
-- `/shop channel <channel>` - Set the shopping list channel
-
-## Installation
+- `/shop add <item> [quantity]` - Add item(s) to the active list (separate multiple with `;`)
+- `/shop list [title]` - Display a shopping list (with autocomplete for list names)
+- `/shop lists` - Show all available shopping lists with their status
+- `/shop clear` - Clear items from the active shopping list
+- `/shop help` - Show help and instructions## Installation
 
 1. Clone this repository
 2. Run `npm install`
@@ -69,17 +69,21 @@ A Discord bot that creates interactive shopping lists using emoji reactions for 
 
 ## Usage
 
-1. Set a shopping channel: `/shop channel #shopping`
-2. Create a shopping list: `/shop create "Weekly Groceries" milk;bread;eggs`
-3. Display a shopping list:
-   - Current channel: `/shop list`
-   - By title: `/shop list "Weekly Groceries"`
-4. Add multiple items at once: `/shop add "butter;cheese;yogurt"`
-5. Users can click emojis to interact with items:
+1. Create a shopping list: `/shop create "Weekly Groceries" milk;bread;eggs`
+2. The list becomes active in the current channel
+3. Add items: `/shop add butter;cheese`
+4. Display any list in any channel: `/shop list "Weekly Groceries"`
+5. See all lists: `/shop lists`
+6. Users can click emojis to interact with items:
    - 1️⃣2️⃣3️⃣ to check/uncheck specific items (becomes ~~strikethrough~~)
    - 🧹 to clear all checked items at once
    - ➕ to add new items quickly
    - ✏️ to edit existing items
+
+**How it works:**
+- Each channel remembers the last list you displayed in it
+- `/shop add` and `/shop clear` work on the active list in the current channel
+- You can display any list in any channel - great for having a "Groceries" channel and "Electronics" channel
 
 ## How It Works
 
