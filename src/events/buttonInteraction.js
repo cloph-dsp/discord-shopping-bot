@@ -29,6 +29,18 @@ module.exports = {
     
     console.log(`[BUTTON] ${interaction.user.tag} clicked: ${interaction.customId} on list: ${list.title}`);
     
+    // Defer the interaction immediately so Discord knows we're processing it
+    // This gives us more time and prevents "Unknown interaction" errors
+    const needsDefer = !['add_item', 'edit_item'].includes(interaction.customId);
+    if (needsDefer) {
+      try {
+        await interaction.deferUpdate();
+      } catch (error) {
+        console.error('Error deferring interaction:', error);
+        return;
+      }
+    }
+    
     // Queue this operation to prevent race conditions
     const processOperation = async () => {
       try {
@@ -50,6 +62,10 @@ module.exports = {
           await interaction.reply({ 
             content: '❌ An error occurred while processing your request.',
             flags: 64 
+          }).catch(() => {});
+        } else if (interaction.deferred) {
+          await interaction.editReply({ 
+            content: '❌ An error occurred while processing your request.'
           }).catch(() => {});
         }
       }
@@ -87,9 +103,8 @@ async function handleToggleItem(interaction, listId, list) {
   const item = list.items.find(i => i.id === itemId);
   
   if (!item) {
-    return interaction.reply({ 
-      content: '❌ Item not found.',
-      flags: 64 
+    return interaction.editReply({ 
+      content: '❌ Item not found.'
     });
   }
   
@@ -104,7 +119,7 @@ async function handleToggleItem(interaction, listId, list) {
   const emoji = item.checked ? '⬜' : '✅';
   await interaction.followUp({ 
     content: `${emoji} ${status.charAt(0).toUpperCase() + status.slice(1)}: **${item.text}**`,
-    flags: 64 
+    ephemeral: true
   });
 }
 
@@ -118,12 +133,12 @@ async function handleClearCompleted(interaction, listId, list) {
   if (clearedCount > 0) {
     await interaction.followUp({ 
       content: `🧹 Cleared ${clearedCount} completed item${clearedCount === 1 ? '' : 's'}!`,
-      flags: 64 
+      ephemeral: true
     });
   } else {
     await interaction.followUp({ 
       content: 'No completed items to clear.',
-      flags: 64 
+      ephemeral: true
     });
   }
 }
@@ -280,7 +295,7 @@ async function handleRefresh(interaction, listId) {
   await updateListMessage(interaction, listId);
   await interaction.followUp({ 
     content: '🔄 List refreshed!',
-    flags: 64 
+    ephemeral: true
   });
 }
 
@@ -292,7 +307,8 @@ async function updateListMessage(interaction, listId) {
   const buttons = createShoppingListButtons(list);
   
   try {
-    await interaction.update({ embeds: [embed], components: buttons });
+    // Use editReply since we deferred the interaction
+    await interaction.editReply({ embeds: [embed], components: buttons });
     messageCache.updateCache(interaction.message);
   } catch (error) {
     console.error('Error updating list message:', error);

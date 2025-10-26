@@ -43,37 +43,41 @@ function createShoppingListEmbed(list) {
     .setTimestamp();
 
   if (totalItems === 0) {
-    embed.setDescription('*Your shopping list is empty. Add some items to get started!*');
-    embed.setFooter({ text: '⬇️ Click the "Add Items" button below or use /shop add' });
+    embed.setDescription('*Your shopping list is empty. Click the "Add Items" button below to get started!*');
+    embed.setFooter({ text: '⬇️ Use the buttons below' });
     return embed;
   }
 
+  // Compact summary instead of full list (buttons show everything)
   let description = '';
-
-  // Show all items with improved formatting
-  list.items.forEach((item, index) => {
-    const status = item.checked ? '✅' : '⬜';
-    const itemText = item.checked ? `~~${item.text}~~` : item.text;
-    
-    description += `${index + 1}. ${status} ${itemText}\n`;
-  });
+  
+  if (totalItems <= 20) {
+    // All items have buttons - no need to show in embed
+    description = `*Use the buttons below to check off items as you shop!*`;
+  } else {
+    // Show items beyond the 20 that have buttons
+    description = `**First 20 items have buttons below.**\n\n**Remaining items:**\n`;
+    for (let i = 20; i < list.items.length; i++) {
+      const item = list.items[i];
+      const status = item.checked ? '✅' : '⬜';
+      const itemText = item.checked ? `~~${item.text}~~` : item.text;
+      description += `${i + 1}. ${status} ${itemText}\n`;
+    }
+  }
 
   embed.setDescription(description.trim());
 
-  // Enhanced footer with completion status and instructions
-  const completionText = `${checkedItems.length}/${totalItems} items checked`;
-  let footerText = completionText;
+  // Enhanced footer with completion status
+  const completionText = `${checkedItems.length}/${totalItems} items`;
+  let footerText = '';
   
   if (isComplete) {
-    footerText = `✨ ${completionText} - All done!`;
+    footerText = `✨ All done! (${completionText})`;
   } else if (checkedItems.length > 0) {
-    footerText = `📝 ${completionText} - Keep going!`;
+    footerText = `📝 ${completionText} checked - Keep going!`;
   } else {
     footerText = `🛒 ${completionText} - Let's shop!`;
   }
-  
-  // Add interaction hints
-  footerText += ` • Click buttons below to interact`;
   
   embed.setFooter({ text: footerText });
 
