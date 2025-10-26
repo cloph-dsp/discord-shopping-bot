@@ -46,6 +46,8 @@ for (const file of eventFiles) {
 
 // Handle interactions
 client.on('interactionCreate', async interaction => {
+  console.log(`[INTERACTION] Received: ${interaction.commandName || 'autocomplete'} from ${interaction.user.tag}`);
+  
   // Handle autocomplete interactions for command options
   if (interaction.isAutocomplete()) {
     const command = interaction.client.commands.get(interaction.commandName);
@@ -69,9 +71,12 @@ client.on('interactionCreate', async interaction => {
   }
 
   try {
+    console.log(`[COMMAND] Executing: ${interaction.commandName}`);
     await command.execute(interaction);
+    console.log(`[COMMAND] Completed: ${interaction.commandName}`);
   } catch (error) {
     console.error('Command execution error:', error);
+    console.error('Stack trace:', error.stack);
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp({ content: 'There was an error while executing this command!', flags: 64 });

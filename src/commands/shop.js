@@ -185,6 +185,9 @@ async function handleAdd(interaction) {
 }
 
 async function handleList(interaction) {
+  // Defer immediately to avoid timeout
+  await interaction.deferReply({ flags: 64 });
+  
   // Determine target list: by title or current channel
   const titleOption = interaction.options.getString('title');
   let channelId, list, targetChannel;
@@ -192,7 +195,7 @@ async function handleList(interaction) {
     const found = storage.getListByTitle(titleOption);
     if (!found) {
       const titles = storage.getAllListTitles();
-      return interaction.reply({ content: `❌ No list titled "${titleOption}". Available titles: ${titles.join(', ')}`, flags: 64 });
+      return interaction.editReply({ content: `❌ No list titled "${titleOption}". Available titles: ${titles.join(', ')}` });
     }
     channelId = found.channelId;
     list = found.list;
@@ -206,18 +209,16 @@ async function handleList(interaction) {
   if (!list) {
     const titles = storage.getAllListTitles();
     if (titles.length === 0) {
-      return interaction.reply({ content: '❌ No lists exist. Create one with `/shop create`', flags: 64 });
+      return interaction.editReply({ content: '❌ No lists exist. Create one with `/shop create`' });
     }
-    return interaction.reply({ 
-      content: `❌ No shopping list found. Available titles: ${titles.join(', ')}`,
-      flags: 64 
+    return interaction.editReply({ 
+      content: `❌ No shopping list found. Available titles: ${titles.join(', ')}`
     });
   }
   
-  // Send quick acknowledgment first
-  await interaction.reply({ 
-    content: `🔄 Recalling shopping list "${list.title}" from ${targetChannel}...`,
-    flags: 64 
+  // Update acknowledgment
+  await interaction.editReply({ 
+    content: `🔄 Recalling shopping list "${list.title}" from ${targetChannel}...`
   });
   
   // Delete old message if it exists
