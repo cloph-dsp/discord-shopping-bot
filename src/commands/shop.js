@@ -4,6 +4,13 @@ const { createShoppingListEmbed, createInstructionEmbed } = require('../utils/em
 const { createShoppingListButtons } = require('../utils/buttons');
 const messageCache = require('../utils/messageCache');
 
+// Cache autocomplete results to speed up responses
+let autocompleteCache = {
+  titles: [],
+  lastUpdate: 0,
+  ttl: 5000 // 5 second cache
+};
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('shop')
@@ -80,14 +87,38 @@ module.exports = {
   },
   // Autocomplete handler for list titles
   async autocomplete(interaction) {
-    const focused = interaction.options.getFocused();
-    const titles = storage.getAllListTitles();
-    const filtered = titles.filter(title =>
-      title.toLowerCase().startsWith(focused.toLowerCase())
-    ).slice(0, 25);
-    await interaction.respond(
-      filtered.map(title => ({ name: title, value: title }))
-    );
+    try {
+      const focused = interaction.options.getFocused();
+      
+      // Use cached titles if available and fresh
+      const now = Date.now();
+      if (now - autocompleteCache.lastUpdate > autocompleteCache.ttl) {
+        autocompleteCache.titles = storage.getAllListTitles();
+        autocompleteCache.lastUpdate = now;
+      }
+      
+      // Quick filter and limit to 25 results
+      // Use includes() instead of startsWith() for better UX
+      const filtered = autocompleteCache.titles
+        .filter(title => title.toLowerCase().includes(focused.toLowerCase()))
+        .slice(0, 25);
+      
+      // Respond immediately with timeout protection
+      const responsePromise = interaction.respond(
+        filtered.map(title => ({ name: title, value: title }))
+      );
+      
+      // Add a timeout to prevent hanging on slow connections
+      await Promise.race([
+        responsePromise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Autocomplete timeout')), 2500)
+        )
+      ]);
+    } catch (error) {
+      // Silently fail - autocomplete errors shouldn't crash the bot
+      console.error('Autocomplete error:', error.message || error);
+    }
   }
 };
 
