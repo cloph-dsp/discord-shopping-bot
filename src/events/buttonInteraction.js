@@ -42,13 +42,13 @@ module.exports = {
     const processOperation = async () => {
       try {
         if (interaction.customId.startsWith('toggle_')) {
-          await handleToggleItem(interaction, listId, list);
+          await handleToggleItem(interaction, listId);
         } else if (interaction.customId === 'clear_completed') {
-          await handleClearCompleted(interaction, listId, list);
+          await handleClearCompleted(interaction, listId);
         } else if (interaction.customId === 'add_item') {
-          await handleAddItem(interaction, listId, list);
+          await handleAddItem(interaction, listId);
         } else if (interaction.customId === 'edit_item') {
-          await handleEditItem(interaction, listId, list);
+          await handleEditItem(interaction, listId);
         } else if (interaction.customId === 'refresh_list') {
           await handleRefresh(interaction, listId);
         }
@@ -95,7 +95,13 @@ module.exports = {
   },
 };
 
-async function handleToggleItem(interaction, listId, list) {
+async function handleToggleItem(interaction, listId) {
+  // Get fresh list data
+  const list = storage.getList(listId);
+  if (!list) {
+    return interaction.editReply({ content: '❌ List not found.' });
+  }
+  
   const itemId = interaction.customId.split('_')[1];
   const item = list.items.find(i => i.id === itemId);
   
@@ -110,13 +116,15 @@ async function handleToggleItem(interaction, listId, list) {
   
   // Update the original message directly (not through interaction)
   try {
-    const message = await messageCache.getMessage(interaction.channel, list.messageId);
-    if (message) {
-      const updatedList = storage.getList(listId);
-      const embed = createShoppingListEmbed(updatedList);
-      const buttons = createShoppingListButtons(updatedList);
-      await message.edit({ embeds: [embed], components: buttons });
-      messageCache.updateCache(message);
+    const updatedList = storage.getList(listId);
+    if (updatedList && updatedList.messageId) {
+      const message = await messageCache.getMessage(interaction.channel, updatedList.messageId);
+      if (message) {
+        const embed = createShoppingListEmbed(updatedList);
+        const buttons = createShoppingListButtons(updatedList);
+        await message.edit({ embeds: [embed], components: buttons });
+        messageCache.updateCache(message);
+      }
     }
   } catch (err) {
     console.error('Error updating list message:', err);
@@ -130,18 +138,20 @@ async function handleToggleItem(interaction, listId, list) {
   });
 }
 
-async function handleClearCompleted(interaction, listId, list) {
+async function handleClearCompleted(interaction, listId) {
   const clearedCount = storage.clearCompletedItems(listId);
   
   // Update the original message directly
   try {
-    const message = await messageCache.getMessage(interaction.channel, list.messageId);
-    if (message) {
-      const updatedList = storage.getList(listId);
-      const embed = createShoppingListEmbed(updatedList);
-      const buttons = createShoppingListButtons(updatedList);
-      await message.edit({ embeds: [embed], components: buttons });
-      messageCache.updateCache(message);
+    const updatedList = storage.getList(listId);
+    if (updatedList && updatedList.messageId) {
+      const message = await messageCache.getMessage(interaction.channel, updatedList.messageId);
+      if (message) {
+        const embed = createShoppingListEmbed(updatedList);
+        const buttons = createShoppingListButtons(updatedList);
+        await message.edit({ embeds: [embed], components: buttons });
+        messageCache.updateCache(message);
+      }
     }
   } catch (err) {
     console.error('Error updating list message:', err);
@@ -159,7 +169,7 @@ async function handleClearCompleted(interaction, listId, list) {
   }
 }
 
-async function handleAddItem(interaction, listId, list) {
+async function handleAddItem(interaction, listId) {
   await interaction.editReply({
     content: '➕ What would you like to add to the shopping list?\n*Separate multiple items with semicolons (;). Reply within 30 seconds.*'
   });
@@ -189,13 +199,15 @@ async function handleAddItem(interaction, listId, list) {
     
     // Update the shopping list message
     try {
-      const message = await messageCache.getMessage(interaction.channel, list.messageId);
-      if (message) {
-        const updatedList = storage.getList(listId);
-        const embed = createShoppingListEmbed(updatedList);
-        const buttons = createShoppingListButtons(updatedList);
-        await message.edit({ embeds: [embed], components: buttons });
-        messageCache.updateCache(message);
+      const updatedList = storage.getList(listId);
+      if (updatedList && updatedList.messageId) {
+        const message = await messageCache.getMessage(interaction.channel, updatedList.messageId);
+        if (message) {
+          const embed = createShoppingListEmbed(updatedList);
+          const buttons = createShoppingListButtons(updatedList);
+          await message.edit({ embeds: [embed], components: buttons });
+          messageCache.updateCache(message);
+        }
       }
     } catch (err) {
       console.error('Error updating shopping list after add:', err);
@@ -218,7 +230,13 @@ async function handleAddItem(interaction, listId, list) {
   });
 }
 
-async function handleEditItem(interaction, listId, list) {
+async function handleEditItem(interaction, listId) {
+  // Get fresh list data
+  const list = storage.getList(listId);
+  if (!list) {
+    return interaction.editReply({ content: '❌ List not found.' });
+  }
+  
   if (list.items.length === 0) {
     return interaction.editReply({ 
       content: '❌ No items to edit.'
