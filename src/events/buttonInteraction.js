@@ -31,14 +31,11 @@ module.exports = {
     
     // Defer the interaction immediately so Discord knows we're processing it
     // This gives us more time and prevents "Unknown interaction" errors
-    const needsDefer = !['add_item', 'edit_item'].includes(interaction.customId);
-    if (needsDefer) {
-      try {
-        await interaction.deferUpdate();
-      } catch (error) {
-        console.error('Error deferring interaction:', error);
-        return;
-      }
+    try {
+      await interaction.deferReply({ ephemeral: true });
+    } catch (error) {
+      console.error('Error deferring interaction:', error);
+      return;
     }
     
     // Queue this operation to prevent race conditions
@@ -111,42 +108,60 @@ async function handleToggleItem(interaction, listId, list) {
   // Toggle item
   storage.toggleItemChecked(listId, itemId);
   
-  // Update message
-  await updateListMessage(interaction, listId);
+  // Update the original message directly (not through interaction)
+  try {
+    const message = await messageCache.getMessage(interaction.channel, list.messageId);
+    if (message) {
+      const updatedList = storage.getList(listId);
+      const embed = createShoppingListEmbed(updatedList);
+      const buttons = createShoppingListButtons(updatedList);
+      await message.edit({ embeds: [embed], components: buttons });
+      messageCache.updateCache(message);
+    }
+  } catch (err) {
+    console.error('Error updating list message:', err);
+  }
   
   // Send ephemeral feedback
   const status = item.checked ? 'unchecked' : 'checked';
   const emoji = item.checked ? '⬜' : '✅';
-  await interaction.followUp({ 
-    content: `${emoji} ${status.charAt(0).toUpperCase() + status.slice(1)}: **${item.text}**`,
-    ephemeral: true
+  await interaction.editReply({ 
+    content: `${emoji} ${status.charAt(0).toUpperCase() + status.slice(1)}: **${item.text}**`
   });
 }
 
 async function handleClearCompleted(interaction, listId, list) {
   const clearedCount = storage.clearCompletedItems(listId);
   
-  // Update message
-  await updateListMessage(interaction, listId);
+  // Update the original message directly
+  try {
+    const message = await messageCache.getMessage(interaction.channel, list.messageId);
+    if (message) {
+      const updatedList = storage.getList(listId);
+      const embed = createShoppingListEmbed(updatedList);
+      const buttons = createShoppingListButtons(updatedList);
+      await message.edit({ embeds: [embed], components: buttons });
+      messageCache.updateCache(message);
+    }
+  } catch (err) {
+    console.error('Error updating list message:', err);
+  }
   
   // Send feedback
   if (clearedCount > 0) {
-    await interaction.followUp({ 
-      content: `🧹 Cleared ${clearedCount} completed item${clearedCount === 1 ? '' : 's'}!`,
-      ephemeral: true
+    await interaction.editReply({ 
+      content: `🧹 Cleared ${clearedCount} completed item${clearedCount === 1 ? '' : 's'}!`
     });
   } else {
-    await interaction.followUp({ 
-      content: 'No completed items to clear.',
-      ephemeral: true
+    await interaction.editReply({ 
+      content: 'No completed items to clear.'
     });
   }
 }
 
 async function handleAddItem(interaction, listId, list) {
-  await interaction.reply({
-    content: '➕ What would you like to add to the shopping list?\n*Separate multiple items with semicolons (;). Reply within 30 seconds.*',
-    flags: 64
+  await interaction.editReply({
+    content: '➕ What would you like to add to the shopping list?\n*Separate multiple items with semicolons (;). Reply within 30 seconds.*'
   });
   
   const filter = m => m.author.id === interaction.user.id;
@@ -205,9 +220,8 @@ async function handleAddItem(interaction, listId, list) {
 
 async function handleEditItem(interaction, listId, list) {
   if (list.items.length === 0) {
-    return interaction.reply({ 
-      content: '❌ No items to edit.',
-      flags: 64 
+    return interaction.editReply({ 
+      content: '❌ No items to edit.'
     });
   }
   
@@ -219,7 +233,7 @@ async function handleEditItem(interaction, listId, list) {
   });
   editText += `\nReply with a number (1-${list.items.length}), or "cancel" to cancel.`;
   
-  await interaction.reply({ content: editText, flags: 64 });
+  await interaction.editReply({ content: editText });
   
   const filter = m => m.author.id === interaction.user.id;
   const collector = interaction.channel.createMessageCollector({ filter, time: 30000, max: 1 });
@@ -292,32 +306,23 @@ async function handleEditItemText(interaction, choiceMessage, item, listId) {
 }
 
 async function handleRefresh(interaction, listId) {
-  await updateListMessage(interaction, listId);
-  await interaction.followUp({ 
-    content: '🔄 List refreshed!',
-    ephemeral: true
-  });
-}
-
-async function updateListMessage(interaction, listId) {
+  // Update the original message directly
   const list = storage.getList(listId);
-  if (!list) return;
-  
-  const embed = createShoppingListEmbed(list);
-  const buttons = createShoppingListButtons(list);
-  
-  try {
-    // Use editReply since we deferred the interaction
-    await interaction.editReply({ embeds: [embed], components: buttons });
-    messageCache.updateCache(interaction.message);
-  } catch (error) {
-    console.error('Error updating list message:', error);
-    
-    // If message no longer exists, clear the reference
-    if (error.code === 10008) {
-      console.log('Message was deleted, clearing reference');
-      storage.clearListMessage(listId);
-      messageCache.invalidate(interaction.message.id);
+  if (list) {
+    try {
+      const message = await messageCache.getMessage(interaction.channel, list.messageId);
+      if (message) {
+        const embed = createShoppingListEmbed(list);
+        const buttons = createShoppingListButtons(list);
+        await message.edit({ embeds: [embed], components: buttons });
+        messageCache.updateCache(message);
+      }
+    } catch (err) {
+      console.error('Error updating list message:', err);
     }
   }
+  
+  await interaction.editReply({ 
+    content: '🔄 List refreshed!'
+  });
 }
