@@ -21,7 +21,7 @@ module.exports = {
     if (!found) {
       return interaction.reply({ 
         content: '❌ This shopping list no longer exists.',
-        flags: 64 
+        ephemeral: true
       });
     }
     
@@ -58,7 +58,7 @@ module.exports = {
         if (!interaction.replied && !interaction.deferred) {
           await interaction.reply({ 
             content: '❌ An error occurred while processing your request.',
-            flags: 64 
+            ephemeral: true
           }).catch(() => {});
         } else if (interaction.deferred) {
           await interaction.editReply({ 
@@ -182,7 +182,10 @@ async function handleAddItem(interaction, listId) {
     const items = m.content.split(';').map(item => item.trim()).filter(item => item.length > 0);
     
     if (items.length === 0) {
-      await m.reply('❌ Please provide at least one valid item.');
+      await interaction.followUp({
+        content: '❌ Please provide at least one valid item.',
+        ephemeral: true
+      });
       return;
     }
     
@@ -217,14 +220,17 @@ async function handleAddItem(interaction, listId) {
     const resultText = addedItems.length === 1 
       ? `➕ Added "${addedItems[0]}" to the shopping list!`
       : `➕ Added ${addedItems.length} items to the shopping list:\n• ${addedItems.join('\n• ')}`;
-    await m.reply(resultText);
+    await interaction.followUp({
+      content: resultText,
+      ephemeral: true
+    });
   });
   
   collector.on('end', (collected, reason) => {
     if (reason === 'time') {
       interaction.followUp({ 
         content: '⏰ Add timeout. Use the button again to try.',
-        flags: 64 
+        ephemeral: true
       }).catch(() => {});
     }
   });
@@ -277,7 +283,7 @@ async function handleEditItem(interaction, listId) {
     if (reason === 'time') {
       interaction.followUp({ 
         content: '⏰ Edit timeout.',
-        flags: 64 
+        ephemeral: true
       }).catch(() => {});
     }
   });
@@ -317,7 +323,7 @@ async function handleEditItemText(interaction, choiceMessage, item, listId) {
     if (reason === 'time') {
       interaction.followUp({ 
         content: '⏰ Edit timeout.',
-        flags: 64 
+        ephemeral: true
       }).catch(() => {});
     }
   });
