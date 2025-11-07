@@ -1,11 +1,25 @@
 const { Events } = require('discord.js');
 const storage = require('../utils/storage');
 const { createShoppingListEmbed } = require('../utils/embeds');
-const { createShoppingListButtons, disableAllButtons } = require('../utils/buttons');
+const { createShoppingListButtons } = require('../utils/buttons');
 const messageCache = require('../utils/messageCache');
 
 // Track ongoing operations per message to prevent race conditions
 const operationLocks = new Map(); // messageId -> Promise
+
+async function deleteMessageSafe(message, context) {
+  if (!message) return;
+  if (typeof message.deletable === 'boolean' && !message.deletable) return;
+  try {
+    await message.delete();
+  } catch (err) {
+    if (err && (err.code === 50013 || err.code === 10008)) {
+      // Missing permissions or already deleted - ignore silently
+      return;
+    }
+    console.error(`Failed to delete ${context}:`, err);
+  }
+}
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -186,6 +200,7 @@ async function handleAddItem(interaction, listId) {
         content: '❌ Please provide at least one valid item.',
         ephemeral: true
       });
+      await deleteMessageSafe(m, 'user add message (empty items)');
       return;
     }
     
@@ -224,6 +239,7 @@ async function handleAddItem(interaction, listId) {
       content: resultText,
       ephemeral: true
     });
+    await deleteMessageSafe(m, 'user add message');
   });
   
   collector.on('end', (collected, reason) => {
@@ -266,16 +282,19 @@ async function handleEditItem(interaction, listId) {
     const choice = m.content.trim().toLowerCase();
     
     if (choice === 'cancel') {
-      await m.reply('❌ Edit cancelled.');
+      await interaction.followUp({ content: '❌ Edit cancelled.', ephemeral: true });
+      await deleteMessageSafe(m, 'edit selection message (cancel)');
       return;
     }
     
-    const itemIndex = parseInt(choice) - 1;
+    const itemIndex = parseInt(choice, 10) - 1;
     if (itemIndex >= 0 && itemIndex < list.items.length) {
       const item = list.items[itemIndex];
-      await handleEditItemText(interaction, m, item, listId);
+      await deleteMessageSafe(m, 'edit selection message');
+      await handleEditItemText(interaction, item, listId);
     } else {
-      await m.reply('❌ Invalid choice. Please try again.');
+      await interaction.followUp({ content: '❌ Invalid choice. Please try again.', ephemeral: true });
+      await deleteMessageSafe(m, 'invalid edit selection message');
     }
   });
   
@@ -289,22 +308,26 @@ async function handleEditItem(interaction, listId) {
   });
 }
 
-async function handleEditItemText(interaction, choiceMessage, item, listId) {
-  await choiceMessage.reply(
-    `✏️ Enter the new text for: **${item.text}**\n*Type \`cancel\` to cancel editing.*`
-  );
+async function handleEditItemText(interaction, item, listId) {
+  await interaction.followUp({
+    content: `✏️ Enter the new text for: **${item.text}**\n*Type \`cancel\` to cancel editing.*`,
+    ephemeral: true
+  });
   
   const filter = m => m.author.id === interaction.user.id;
   const collector = interaction.channel.createMessageCollector({ filter, time: 30000, max: 1 });
   
   collector.on('collect', async m => {
-    if (m.content.toLowerCase() === 'cancel') {
-      await m.reply('❌ Edit cancelled.');
+    const content = m.content.trim();
+    const lower = content.toLowerCase();
+    if (lower === 'cancel') {
+      await interaction.followUp({ content: '❌ Edit cancelled.', ephemeral: true });
+      await deleteMessageSafe(m, 'edit cancel message');
       return;
     }
     
     const oldText = item.text;
-    storage.editItem(listId, item.id, m.content);
+    storage.editItem(listId, item.id, content);
     
     // Update the list message
     const list = storage.getList(listId);
@@ -316,7 +339,12 @@ async function handleEditItemText(interaction, choiceMessage, item, listId) {
       messageCache.updateCache(message);
     }
     
-    await m.reply(`✏️ Updated "${oldText}" → "${m.content}"`);
+    await interaction.followUp({
+      content: `✏️ Updated "${oldText}" → "${content}"`,
+      ephemeral: true
+    });
+    
+    await deleteMessageSafe(m, 'edit response message');
   });
   
   collector.on('end', (collected, reason) => {
