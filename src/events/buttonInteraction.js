@@ -129,8 +129,9 @@ async function handleToggleItem(interaction, listId) {
   storage.toggleItemChecked(listId, itemId);
   
   // Update the original message directly (not through interaction)
+  let updatedList;
   try {
-    const updatedList = storage.getList(listId);
+    updatedList = storage.getList(listId);
     if (updatedList && updatedList.messageId) {
       const message = await messageCache.getMessage(interaction.channel, updatedList.messageId);
       if (message) {
@@ -144,9 +145,11 @@ async function handleToggleItem(interaction, listId) {
     console.error('Error updating list message:', err);
   }
   
-  // Send ephemeral feedback
-  const status = item.checked ? 'unchecked' : 'checked';
-  const emoji = item.checked ? '⬜' : '✅';
+  // Send ephemeral feedback (using the latest item state after toggle)
+  const updatedItem = updatedList?.items.find(i => i.id === itemId);
+  const isCheckedNow = updatedItem ? updatedItem.checked : !item.checked;
+  const status = isCheckedNow ? 'checked' : 'unchecked';
+  const emoji = isCheckedNow ? '✅' : '⬜';
   await interaction.editReply({ 
     content: `${emoji} ${status.charAt(0).toUpperCase() + status.slice(1)}: **${item.text}**`
   });
