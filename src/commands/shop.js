@@ -399,4 +399,4 @@ async function handleHelp(interaction) {
   await interaction.editReply({ embeds: [embed], flags: 64 });
 }
 
-// addReactionsToMessage function moved to utils/reactions.js
+// Reaction helpers removed in favor of button + modal workflows
