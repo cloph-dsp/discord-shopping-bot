@@ -42,6 +42,7 @@ module.exports = {
 
     console.log(`[BUTTON] ${interaction.user.tag} clicked: ${customId} on list: ${list.title}`);
 
+    // Modal buttons (add/edit) don't need defer
     if (customId === 'add_item') {
       await showAddItemModal(interaction, list, listId);
       return;
@@ -49,45 +50,48 @@ module.exports = {
 
     if (customId === 'edit_item') {
       if (list.items.length === 0) {
-        await interaction.reply({ content: '❌ No items to edit.', ephemeral: true });
+        await interaction.reply({ content: '❌ No items to edit.', flags: 64 });
         return;
       }
       await showEditItemModal(interaction, list, listId);
       return;
     }
 
+    // For other buttons: defer FIRST (before queuing), then queue the operation
     try {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: 64 });
     } catch (error) {
       console.error('Error deferring interaction:', error);
       return;
     }
 
+    // Now queue the operation without blocking the defer
     const operation = async () => {
-      if (customId.startsWith('toggle_')) {
-        const itemId = customId.split('_')[1];
-        await handleToggleItem(interaction, listId, itemId);
-        return;
-      }
-
-      if (customId === 'clear_completed') {
-        await handleClearCompleted(interaction, listId);
-        return;
-      }
-
-      if (customId === 'refresh_list') {
-        await handleRefresh(interaction, listId);
+      try {
+        if (customId.startsWith('toggle_')) {
+          const itemId = customId.split('_')[1];
+          await handleToggleItem(interaction, listId, itemId);
+        } else if (customId === 'clear_completed') {
+          await handleClearCompleted(interaction, listId);
+        } else if (customId === 'refresh_list') {
+          await handleRefresh(interaction, listId);
+        }
+      } catch (error) {
+        console.error('Error handling button operation:', error);
+        try {
+          await interaction.editReply({
+            content: '❌ An error occurred while processing your request.'
+          });
+        } catch (editError) {
+          console.error('Failed to edit reply after error:', editError);
+        }
       }
     };
 
-    try {
-      await queueMessageOperation(messageId, operation);
-    } catch (error) {
-      console.error('Error handling button interaction:', error);
-      await interaction.editReply({
-        content: '❌ An error occurred while processing your request.'
-      }).catch(() => {});
-    }
+    // Fire and forget - operation runs in the background
+    queueMessageOperation(messageId, operation).catch(err => {
+      console.error('Queued operation failed:', err);
+    });
   }
 };
 
@@ -159,10 +163,15 @@ async function handleAddItemModalSubmit(interaction) {
   const items = itemsRaw.split(';').map(item => item.trim()).filter(Boolean);
 
   if (items.length === 0) {
-    return interaction.reply({ content: '❌ Please provide at least one item.', ephemeral: true });
+    return interaction.reply({ content: '❌ Please provide at least one item.', flags: 64 });
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  try {
+    await interaction.deferReply({ flags: 64 });
+  } catch (error) {
+    console.error('Error deferring modal submit:', error);
+    return;
+  }
 
   const list = storage.getList(listId);
   if (!list) {
@@ -200,14 +209,19 @@ async function handleEditItemModalSubmit(interaction) {
 
   const itemIndex = Number.parseInt(itemNumberRaw, 10) - 1;
   if (!Number.isInteger(itemIndex) || itemIndex < 0) {
-    return interaction.reply({ content: '❌ Please provide a valid item number.', ephemeral: true });
+    return interaction.reply({ content: '❌ Please provide a valid item number.', flags: 64 });
   }
 
   if (!newText) {
-    return interaction.reply({ content: '❌ New text cannot be empty.', ephemeral: true });
+    return interaction.reply({ content: '❌ New text cannot be empty.', flags: 64 });
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  try {
+    await interaction.deferReply({ flags: 64 });
+  } catch (error) {
+    console.error('Error deferring modal submit:', error);
+    return;
+  }
 
   const list = storage.getList(listId);
   if (!list) {
