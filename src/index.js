@@ -28,12 +28,32 @@ for (const file of commandFiles) {
   }
 }
 
-// IMPORTANT: Register interaction handler BEFORE loading event handlers
-// This ensures proper event handler ordering and prevents interference
+// Load events
+const eventsPath = path.join(__dirname, 'events');
+const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
+
+for (const file of eventFiles) {
+  const filePath = path.join(eventsPath, file);
+  const event = require(filePath);
+  if (event.once) {
+    client.once(event.name, (...args) => event.execute(...args));
+  } else {
+    client.on(event.name, (...args) => event.execute(...args));
+  }
+}
+
+// DEPRECATED: Global interaction handler - use event files instead
+// This was causing race conditions with button/modal interactions
+// All interaction handling is now delegated to:
+//   - buttonInteraction.js for buttons and modals
+//   - shop.js for slash commands (via interactionCreate in this global handler)
+// NOTE: This handler ONLY processes slash commands and autocomplete
+// Button/Modal interactions are handled by buttonInteraction.js event
+
+// Slash command handler - separate from button/modal interactions
 client.on('interactionCreate', async interaction => {
   // Handle autocomplete interactions for command options
   if (interaction.isAutocomplete()) {
-    console.log(`[AUTOCOMPLETE] from ${interaction.user.tag}`);
     const command = interaction.client.commands.get(interaction.commandName);
     if (command && typeof command.autocomplete === 'function') {
       try {
@@ -45,16 +65,11 @@ client.on('interactionCreate', async interaction => {
     return;
   }
   
-  // Delegate button/modal interactions to the loaded event handler
-  // Return immediately to avoid interfering with buttonInteraction.js
-  if (interaction.isButton() || interaction.isModalSubmit()) {
-    return;
-  }
-  
   // Only handle slash commands here
+  // Button and Modal interactions are handled by buttonInteraction.js
   if (!interaction.isChatInputCommand()) return;
 
-  console.log(`[INTERACTION] Received: ${interaction.commandName} from ${interaction.user.tag}`);
+  console.log(`[COMMAND] Received: ${interaction.commandName} from ${interaction.user.tag}`);
 
   const command = interaction.client.commands.get(interaction.commandName);
 
@@ -81,21 +96,6 @@ client.on('interactionCreate', async interaction => {
     }
   }
 });
-
-// Load events AFTER setting up the interaction handler
-// Button/Modal interactions will be handled by the loaded buttonInteraction.js
-const eventsPath = path.join(__dirname, 'events');
-const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
-
-for (const file of eventFiles) {
-  const filePath = path.join(eventsPath, file);
-  const event = require(filePath);
-  if (event.once) {
-    client.once(event.name, (...args) => event.execute(...args));
-  } else {
-    client.on(event.name, (...args) => event.execute(...args));
-  }
-}
 
 // Handle connection errors and resilience
 client.on('error', error => {

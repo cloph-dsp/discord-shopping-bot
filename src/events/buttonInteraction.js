@@ -56,21 +56,29 @@ module.exports = {
       }
 
       console.log(`[BUTTON] ${interaction.user.tag} clicked: ${customId} on list: ${listTitle}`);
+      const modalStartTime = Date.now();
 
       if (customId === 'add_item') {
+        // Build and show modal IMMEDIATELY - no delay
+        const identifier = listId;
+        const modal = new ModalBuilder()
+          .setCustomId(`addItemModal:${identifier}`)
+          .setTitle(`Add Items — ${truncate(listTitle, 45)}`);
+
+        const itemsInput = new TextInputBuilder()
+          .setCustomId('add_item_input')
+          .setLabel('Items (use ; to separate)')
+          .setPlaceholder('milk;bread;eggs')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(itemsInput));
+        
         try {
-          const modalStartTime = Date.now();
-          await showAddItemModal(interaction, listTitle, listId);
+          await interaction.showModal(modal);
           console.log(`[MODAL] showModal took ${Date.now() - modalStartTime}ms`);
         } catch (error) {
           console.error('Failed to show add modal:', error);
-          try {
-            if (!interaction.replied && !interaction.deferred) {
-              await interaction.reply({ content: '❌ Failed to show add modal. Please try again.', flags: 64 });
-            }
-          } catch (e) {
-            console.error('Failed to send error reply:', e);
-          }
         }
         return;
       }
@@ -87,17 +95,35 @@ module.exports = {
           console.error('Error checking items:', e);
         }
         
+        // Build and show modal IMMEDIATELY - no delay
+        const identifier = listId;
+        const modal = new ModalBuilder()
+          .setCustomId(`editItemModal:${identifier}`)
+          .setTitle(`Edit Item — ${truncate(listTitle, 45)}`);
+
+        const indexInput = new TextInputBuilder()
+          .setCustomId('edit_item_index')
+          .setLabel('Item number (1-99)')
+          .setPlaceholder('1')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true);
+
+        const textInput = new TextInputBuilder()
+          .setCustomId('edit_item_text')
+          .setLabel('New item text')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true);
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(indexInput),
+          new ActionRowBuilder().addComponents(textInput)
+        );
+
         try {
-          await showEditItemModal(interaction, listTitle, listId);
+          await interaction.showModal(modal);
+          console.log(`[MODAL] showModal took ${Date.now() - modalStartTime}ms`);
         } catch (error) {
           console.error('Failed to show edit modal:', error);
-          try {
-            if (!interaction.replied && !interaction.deferred) {
-              await interaction.reply({ content: '❌ Failed to show edit modal. Please try again.', flags: 64 });
-            }
-          } catch (e) {
-            console.error('Failed to send error reply:', e);
-          }
         }
         return;
       }
