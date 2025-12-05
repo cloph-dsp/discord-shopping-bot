@@ -123,11 +123,12 @@ module.exports = {
 };
 
 async function handleCreate(interaction) {
+  // Defer FIRST before any other operations
+  await interaction.deferReply({ flags: 64 });
+
   const title = interaction.options.getString('title');
   const itemsString = interaction.options.getString('items');
   const channelId = interaction.channel.id;
-
-  await interaction.deferReply({ flags: 64 });
 
   // Check if list with this title already exists
   const existingList = storage.getListByTitle(title);
@@ -233,24 +234,9 @@ async function handleAdd(interaction) {
 }
 
 async function handleList(interaction) {
-  // Defer immediately to avoid timeout
-  try {
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ flags: 64 });
-    }
-  } catch (deferError) {
-    console.error('Failed to defer reply:', deferError);
-    // If defer fails, try immediate reply
-    try {
-      if (!interaction.replied) {
-        await interaction.reply({ content: '⚠️ Processing...', flags: 64 });
-      }
-    } catch (replyError) {
-      console.error('Failed to reply at all:', replyError);
-      return;
-    }
-  }
-  
+  // Defer FIRST immediately to avoid timeout
+  await interaction.deferReply({ flags: 64 });
+
   // Determine target list: by title or current channel's active list
   const titleOption = interaction.options.getString('title');
   const channelId = interaction.channel.id;
