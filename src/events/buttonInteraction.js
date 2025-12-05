@@ -28,6 +28,78 @@ module.exports = {
     if (!interaction.isButton()) return;
 
     const messageId = interaction.message.id;
+    // OPTIMIZATION: For modal buttons (add/edit), we only need the list ID and title
+    // Don't fetch full list data which includes all items (expensive)
+    const customId = interaction.customId;
+    
+    if (customId === 'add_item' || customId === 'edit_item') {
+      // Quick lookup: only get list ID and title for modals
+      let listId, listTitle;
+      try {
+        const row = storage.db.prepare('SELECT id, title FROM lists WHERE messageId = ?').get(messageId);
+        if (!row) {
+          return interaction.reply({
+            content: '❌ This shopping list no longer exists.',
+            ephemeral: true
+          });
+        }
+        listId = row.id;
+        listTitle = row.title;
+      } catch (error) {
+        console.error('Error fetching list for modal:', error);
+        return interaction.reply({
+          content: '❌ An error occurred. Please try again.',
+          ephemeral: true
+        });
+      }
+
+      console.log(`[BUTTON] ${interaction.user.tag} clicked: ${customId} on list: ${listTitle}`);
+
+      if (customId === 'add_item') {
+        try {
+          await showAddItemModal(interaction, listTitle, listId);
+        } catch (error) {
+          console.error('Failed to show add modal:', error);
+          try {
+            if (!interaction.replied && !interaction.deferred) {
+              await interaction.reply({ content: '❌ Failed to show add modal. Please try again.', flags: 64 });
+            }
+          } catch (e) {
+            console.error('Failed to send error reply:', e);
+          }
+        }
+        return;
+      }
+
+      if (customId === 'edit_item') {
+        try {
+          // For edit, we need to check if there are items - do a quick count
+          const itemCount = storage.db.prepare('SELECT COUNT(*) as count FROM items WHERE listId = ?').get(listId);
+          if (itemCount.count === 0) {
+            await interaction.reply({ content: '❌ No items to edit.', flags: 64 });
+            return;
+          }
+        } catch (e) {
+          console.error('Error checking items:', e);
+        }
+        
+        try {
+          await showEditItemModal(interaction, listTitle, listId);
+        } catch (error) {
+          console.error('Failed to show edit modal:', error);
+          try {
+            if (!interaction.replied && !interaction.deferred) {
+              await interaction.reply({ content: '❌ Failed to show edit modal. Please try again.', flags: 64 });
+            }
+          } catch (e) {
+            console.error('Failed to send error reply:', e);
+          }
+        }
+        return;
+      }
+    }
+
+    // For non-modal buttons, fetch full list data
     const found = storage.getListByMessageId(messageId);
 
     if (!found) {
@@ -38,50 +110,6 @@ module.exports = {
     }
 
     const { listId, list } = found;
-    const customId = interaction.customId;
-
-    console.log(`[BUTTON] ${interaction.user.tag} clicked: ${customId} on list: ${list.title}`);
-
-    // Modal buttons (add/edit) - show immediately without timeout (modals respond instantly)
-    if (customId === 'add_item') {
-      try {
-        await showAddItemModal(interaction, list, listId);
-      } catch (error) {
-        console.error('Failed to show add modal:', error);
-        try {
-          if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ Failed to show add modal. Please try again.', flags: 64 });
-          }
-        } catch (e) {
-          console.error('Failed to send error reply:', e);
-        }
-      }
-      return;
-    }
-
-    if (customId === 'edit_item') {
-      if (list.items.length === 0) {
-        try {
-          await interaction.reply({ content: '❌ No items to edit.', flags: 64 });
-        } catch (e) {
-          console.error('Error replying to edit_item:', e);
-        }
-        return;
-      }
-      try {
-        await showEditItemModal(interaction, list, listId);
-      } catch (error) {
-        console.error('Failed to show edit modal:', error);
-        try {
-          if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ Failed to show edit modal. Please try again.', flags: 64 });
-          }
-        } catch (e) {
-          console.error('Failed to send error reply:', e);
-        }
-      }
-      return;
-    }
 
     // For other buttons: defer FIRST (before queuing), then queue the operation
     try {
@@ -280,11 +308,10 @@ async function handleEditItemModalSubmit(interaction) {
   }
 }
 
-async function showAddItemModal(interaction, list, listId) {
-  const identifier = list.id || listId;
+async function showAddItemModal(interaction, listTitle, listId) {
   const modal = new ModalBuilder()
-    .setCustomId(`addItemModal:${identifier}`)
-    .setTitle(`Add Items — ${truncate(list.title, 45)}`);
+    .setCustomId(`addItemModal:${listId}`)
+    .setTitle(`Add Items — ${truncate(listTitle, 45)}`);
 
   const itemsInput = new TextInputBuilder()
     .setCustomId('add_item_input')
@@ -297,15 +324,14 @@ async function showAddItemModal(interaction, list, listId) {
   await interaction.showModal(modal);
 }
 
-async function showEditItemModal(interaction, list, listId) {
-  const identifier = list.id || listId;
+async function showEditItemModal(interaction, listTitle, listId) {
   const modal = new ModalBuilder()
-    .setCustomId(`editItemModal:${identifier}`)
-    .setTitle(`Edit Item — ${truncate(list.title, 45)}`);
+    .setCustomId(`editItemModal:${listId}`)
+    .setTitle(`Edit Item — ${truncate(listTitle, 45)}`);
 
   const indexInput = new TextInputBuilder()
     .setCustomId('edit_item_index')
-    .setLabel(`Item number (1-${Math.min(list.items.length, 99)})`)
+    .setLabel('Item number (1-99)')
     .setPlaceholder('1')
     .setStyle(TextInputStyle.Short)
     .setRequired(true);
