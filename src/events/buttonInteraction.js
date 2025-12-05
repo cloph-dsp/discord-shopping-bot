@@ -18,6 +18,8 @@ const truncate = (str, len) => str.length > len ? str.substring(0, len - 3) + '.
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction) {
+    const startTime = Date.now();
+    
     // Only process button or modal interactions
     if (!interaction.isButton() && !interaction.isModalSubmit()) return;
 
@@ -34,7 +36,7 @@ module.exports = {
 
     // Only process button interactions
     if (!interaction.isButton()) return;
-    console.log(`[BUTTON] Received button: ${interaction.customId}`);
+    console.log(`[BUTTON] Received button: ${interaction.customId} at ${startTime}`);
 
     const customId = interaction.customId;
     const messageId = interaction.message.id;
@@ -42,6 +44,7 @@ module.exports = {
     // ===== MODAL BUTTONS (add_item, edit_item) =====
     // These must be shown within 3 seconds - NO DEFERRED OR OTHER DELAYS
     if (customId === 'add_item' || customId === 'edit_item') {
+      console.log(`[BUTTON] Modal button detected: ${customId}, elapsed: ${Date.now() - startTime}ms`);
       // Fast path: build modal immediately and show it
       try {
         let modal;
@@ -117,7 +120,9 @@ module.exports = {
 
         // Show modal - THIS MUST SUCCEED WITHIN 3 SECONDS
         if (modal) {
+          console.log(`[BUTTON] Showing modal for ${customId}, elapsed: ${Date.now() - startTime}ms`);
           await interaction.showModal(modal);
+          console.log(`[BUTTON] Modal shown successfully for ${customId}, elapsed: ${Date.now() - startTime}ms`);
         }
         return;
       } catch (error) {
@@ -136,10 +141,12 @@ module.exports = {
 
     // ===== OTHER BUTTONS (toggle, clear, refresh) =====
     // Defer immediately to avoid timeouts
+    console.log(`[BUTTON] Non-modal button detected: ${customId}, elapsed: ${Date.now() - startTime}ms, about to defer...`);
     try {
       await interaction.deferReply({ flags: 64 });
+      console.log(`[BUTTON] Deferred successfully for ${customId}, elapsed: ${Date.now() - startTime}ms`);
     } catch (error) {
-      console.error('Error deferring interaction:', error);
+      console.error(`[BUTTON] Error deferring interaction for ${customId}, elapsed: ${Date.now() - startTime}ms:`, error.message);
       return;
     }
 
