@@ -1,14 +1,18 @@
 require('dotenv').config();
-const { Client, Collection, GatewayIntentBits } = require('discord.js');
+const { Client, Collection, GatewayIntentBits, REST } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
-// Create a new client instance
+// Create a new client instance with increased timeout for slow networks
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages
   ],
+  rest: {
+    timeout: 15000, // Increase timeout to 15 seconds for slow networks
+    retries: 3 // Retry failed requests up to 3 times
+  }
 });
 
 // Collection to store commands
