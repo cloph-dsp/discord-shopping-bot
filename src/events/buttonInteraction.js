@@ -42,9 +42,27 @@ module.exports = {
 
     console.log(`[BUTTON] ${interaction.user.tag} clicked: ${customId} on list: ${list.title}`);
 
-    // Modal buttons (add/edit) don't need defer
+    // Modal buttons (add/edit) - show immediately with timeout protection
     if (customId === 'add_item') {
-      await showAddItemModal(interaction, list, listId);
+      try {
+        const modalPromise = showAddItemModal(interaction, list, listId);
+        // Add a 2.5 second timeout to ensure we respond within Discord's 3-second window
+        await Promise.race([
+          modalPromise,
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Modal response timeout')), 2500)
+          )
+        ]);
+      } catch (error) {
+        console.error('Failed to show add modal:', error);
+        try {
+          if (!interaction.replied) {
+            await interaction.reply({ content: '❌ Failed to show add modal. Please try again.', flags: 64 });
+          }
+        } catch (e) {
+          console.error('Failed to send error reply:', e);
+        }
+      }
       return;
     }
 
@@ -53,7 +71,25 @@ module.exports = {
         await interaction.reply({ content: '❌ No items to edit.', flags: 64 });
         return;
       }
-      await showEditItemModal(interaction, list, listId);
+      try {
+        const modalPromise = showEditItemModal(interaction, list, listId);
+        // Add a 2.5 second timeout to ensure we respond within Discord's 3-second window
+        await Promise.race([
+          modalPromise,
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Modal response timeout')), 2500)
+          )
+        ]);
+      } catch (error) {
+        console.error('Failed to show edit modal:', error);
+        try {
+          if (!interaction.replied) {
+            await interaction.reply({ content: '❌ Failed to show edit modal. Please try again.', flags: 64 });
+          }
+        } catch (e) {
+          console.error('Failed to send error reply:', e);
+        }
+      }
       return;
     }
 
