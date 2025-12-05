@@ -20,6 +20,7 @@ module.exports = {
   async execute(interaction) {
     // Handle modal submissions
     if (interaction.isModalSubmit()) {
+      console.log(`[MODAL] Processing modal: ${interaction.customId}`);
       if (interaction.customId.startsWith('addItemModal:')) {
         await handleAddItemModalSubmit(interaction);
       } else if (interaction.customId.startsWith('editItemModal:')) {
@@ -29,30 +30,38 @@ module.exports = {
     }
 
     // Only process button interactions
-    if (!interaction.isButton()) return;
+    if (!interaction.isButton()) {
+      console.log(`[INTERACTION] Skipping non-button interaction: ${interaction.type}`);
+      return;
+    }
+    
+    console.log(`[BUTTON] Received button: ${interaction.customId}`);
 
     const customId = interaction.customId;
     const messageId = interaction.message.id;
 
     // ===== MODAL BUTTONS (add_item, edit_item) =====
-    // These must be shown within 3 seconds
+    // These must be shown within 3 seconds - NO DEFERRED OR OTHER DELAYS
     if (customId === 'add_item' || customId === 'edit_item') {
+      // Fast path: build modal immediately and show it
       try {
-        // Get list ID and title from database
-        const row = storage.db.prepare('SELECT id, title FROM lists WHERE messageId = ?').get(messageId);
-        if (!row) {
-          return interaction.reply({
-            content: '❌ This shopping list no longer exists.',
-            ephemeral: true
-          });
-        }
-
-        const listId = row.id;
-        const listTitle = row.title;
+        let modal;
 
         if (customId === 'add_item') {
-          // Show add item modal
-          const modal = new ModalBuilder()
+          // Get list ID and title synchronously (0ms operation)
+          const row = storage.db.prepare('SELECT id, title FROM lists WHERE messageId = ?').get(messageId);
+          if (!row) {
+            return interaction.reply({
+              content: '❌ This shopping list no longer exists.',
+              ephemeral: true
+            });
+          }
+
+          const listId = row.id;
+          const listTitle = row.title;
+
+          // Build modal
+          modal = new ModalBuilder()
             .setCustomId(`addItemModal:${listId}`)
             .setTitle(`Add Items — ${truncate(listTitle, 45)}`);
 
@@ -64,19 +73,27 @@ module.exports = {
             .setRequired(true);
 
           modal.addComponents(new ActionRowBuilder().addComponents(itemsInput));
-          await interaction.showModal(modal);
-          return;
-        }
+        } else if (customId === 'edit_item') {
+          // Get list ID and title synchronously
+          const row = storage.db.prepare('SELECT id, title FROM lists WHERE messageId = ?').get(messageId);
+          if (!row) {
+            return interaction.reply({
+              content: '❌ This shopping list no longer exists.',
+              ephemeral: true
+            });
+          }
 
-        if (customId === 'edit_item') {
+          const listId = row.id;
+          const listTitle = row.title;
+
           // Check if there are items to edit
           const itemCount = storage.db.prepare('SELECT COUNT(*) as count FROM items WHERE listId = ?').get(listId);
           if (itemCount.count === 0) {
             return interaction.reply({ content: '❌ No items to edit.', flags: 64 });
           }
 
-          // Show edit item modal
-          const modal = new ModalBuilder()
+          // Build modal
+          modal = new ModalBuilder()
             .setCustomId(`editItemModal:${listId}`)
             .setTitle(`Edit Item — ${truncate(listTitle, 45)}`);
 
@@ -97,17 +114,22 @@ module.exports = {
             new ActionRowBuilder().addComponents(indexInput),
             new ActionRowBuilder().addComponents(textInput)
           );
-          await interaction.showModal(modal);
-          return;
         }
+
+        // Show modal - THIS MUST SUCCEED WITHIN 3 SECONDS
+        if (modal) {
+          await interaction.showModal(modal);
+        }
+        return;
       } catch (error) {
-        console.error(`Error handling modal button ${customId}:`, error);
+        // If modal fails, try to reply (this might also fail if >3 seconds)
+        console.error(`Error showing modal for button ${customId}:`, error.message);
         try {
           if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ An error occurred. Please try again.', flags: 64 });
+            await interaction.reply({ content: '❌ Failed to open form. Try again.', flags: 64 });
           }
         } catch (e) {
-          console.error('Failed to send error reply:', e);
+          console.error('Could not send error reply:', e.message);
         }
         return;
       }
