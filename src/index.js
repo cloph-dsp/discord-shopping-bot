@@ -28,26 +28,12 @@ for (const file of commandFiles) {
   }
 }
 
-// Load events
-const eventsPath = path.join(__dirname, 'events');
-const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
-
-for (const file of eventFiles) {
-  const filePath = path.join(eventsPath, file);
-  const event = require(filePath);
-  if (event.once) {
-    client.once(event.name, (...args) => event.execute(...args));
-  } else {
-    client.on(event.name, (...args) => event.execute(...args));
-  }
-}
-
-// Handle interactions
+// IMPORTANT: Register interaction handler BEFORE loading event handlers
+// This ensures proper event handler ordering and prevents interference
 client.on('interactionCreate', async interaction => {
-  console.log(`[INTERACTION] Received: ${interaction.commandName || 'button/modal'} from ${interaction.user.tag}`);
-  
   // Handle autocomplete interactions for command options
   if (interaction.isAutocomplete()) {
+    console.log(`[AUTOCOMPLETE] from ${interaction.user.tag}`);
     const command = interaction.client.commands.get(interaction.commandName);
     if (command && typeof command.autocomplete === 'function') {
       try {
@@ -59,14 +45,16 @@ client.on('interactionCreate', async interaction => {
     return;
   }
   
-  // Handle button and modal interactions - delegate to loaded event handlers
+  // Delegate button/modal interactions to the loaded event handler
+  // Return immediately to avoid interfering with buttonInteraction.js
   if (interaction.isButton() || interaction.isModalSubmit()) {
-    // These are handled by the loaded events (buttonInteraction.js)
-    // The event handler will be called automatically
     return;
   }
   
+  // Only handle slash commands here
   if (!interaction.isChatInputCommand()) return;
+
+  console.log(`[INTERACTION] Received: ${interaction.commandName} from ${interaction.user.tag}`);
 
   const command = interaction.client.commands.get(interaction.commandName);
 
@@ -93,6 +81,21 @@ client.on('interactionCreate', async interaction => {
     }
   }
 });
+
+// Load events AFTER setting up the interaction handler
+// Button/Modal interactions will be handled by the loaded buttonInteraction.js
+const eventsPath = path.join(__dirname, 'events');
+const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
+
+for (const file of eventFiles) {
+  const filePath = path.join(eventsPath, file);
+  const event = require(filePath);
+  if (event.once) {
+    client.once(event.name, (...args) => event.execute(...args));
+  } else {
+    client.on(event.name, (...args) => event.execute(...args));
+  }
+}
 
 // Handle connection errors and resilience
 client.on('error', error => {

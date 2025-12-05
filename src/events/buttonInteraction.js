@@ -35,8 +35,10 @@ module.exports = {
     if (customId === 'add_item' || customId === 'edit_item') {
       // Quick lookup: only get list ID and title for modals
       let listId, listTitle;
+      const dbStartTime = Date.now();
       try {
         const row = storage.db.prepare('SELECT id, title FROM lists WHERE messageId = ?').get(messageId);
+        console.log(`[DB] Query took ${Date.now() - dbStartTime}ms`);
         if (!row) {
           return interaction.reply({
             content: '❌ This shopping list no longer exists.',
@@ -57,7 +59,9 @@ module.exports = {
 
       if (customId === 'add_item') {
         try {
+          const modalStartTime = Date.now();
           await showAddItemModal(interaction, listTitle, listId);
+          console.log(`[MODAL] showModal took ${Date.now() - modalStartTime}ms`);
         } catch (error) {
           console.error('Failed to show add modal:', error);
           try {
