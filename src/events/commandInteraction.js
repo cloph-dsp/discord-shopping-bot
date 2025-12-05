@@ -3,6 +3,8 @@ const { Events } = require('discord.js');
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction) {
+    const startTime = Date.now();
+    
     // Only handle autocomplete and slash commands
     if (interaction.isAutocomplete()) {
       const command = interaction.client.commands.get(interaction.commandName);
@@ -19,7 +21,7 @@ module.exports = {
     // Ignore buttons and modals (handled by buttonInteraction.js)
     if (!interaction.isChatInputCommand()) return;
 
-    console.log(`[COMMAND] Received: ${interaction.commandName} from ${interaction.user.tag}`);
+    console.log(`[COMMAND] Received: ${interaction.commandName} from ${interaction.user.tag} at ${startTime}`);
 
     const command = interaction.client.commands.get(interaction.commandName);
 

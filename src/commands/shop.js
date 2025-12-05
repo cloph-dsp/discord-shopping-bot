@@ -62,7 +62,9 @@ module.exports = {
         .setDescription('Show help and instructions')),
 
   async execute(interaction) {
+    const startTime = Date.now();
     const subcommand = interaction.options.getSubcommand();
+    console.log(`[SHOP] Starting subcommand: ${subcommand} at ${startTime}`);
 
     switch (subcommand) {
       case 'create':
@@ -244,11 +246,14 @@ async function handleAdd(interaction) {
 }
 
 async function handleList(interaction) {
+  const startTime = Date.now();
+  console.log(`[SHOP:LIST] Starting defer at ${startTime}`);
   // Defer FIRST immediately to avoid timeout
   try {
     await interaction.deferReply({ flags: 64 });
+    console.log(`[SHOP:LIST] Deferred successfully after ${Date.now() - startTime}ms`);
   } catch (error) {
-    console.error('Failed to defer handleList:', error.message);
+    console.error(`[SHOP:LIST] Failed to defer after ${Date.now() - startTime}ms:`, error.message);
     return;
   }
 
