@@ -132,7 +132,7 @@ module.exports = {
 
         // Show modal - THIS MUST SUCCEED WITHIN 3 SECONDS
         if (modal) {
-          console.log(`[BUTTON] Showing modal for ${customId}, elapsed: ${Date.now() - startTime}ms`);
+          console.log(`[BUTTON] About to call showModal for ${customId}, elapsed: ${Date.now() - startTime}ms`);
           await interaction.showModal(modal);
           console.log(`[BUTTON] Modal shown successfully for ${customId}, elapsed: ${Date.now() - startTime}ms`);
         }

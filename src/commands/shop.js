@@ -298,13 +298,14 @@ async function handleList(interaction) {
   
   // Delete old message if it exists
   if (list.messageId) {
+    console.log(`[SHOP:LIST] About to delete old message at ${Date.now() - startTime}ms`);
     try {
       const oldChannel = list.channelId ? interaction.client.channels.cache.get(list.channelId) : interaction.channel;
       if (oldChannel) {
         const oldMessage = await messageCache.getMessage(oldChannel, list.messageId);
         if (oldMessage) {
           await oldMessage.delete();
-          console.log('Deleted old shopping list message');
+          console.log(`[SHOP:LIST] Deleted old message at ${Date.now() - startTime}ms`);
         }
         messageCache.invalidate(list.messageId);
       }
@@ -314,11 +315,14 @@ async function handleList(interaction) {
     }
   }
   
+  console.log(`[SHOP:LIST] About to create embed/buttons at ${Date.now() - startTime}ms`);
   const embed = createShoppingListEmbed(list);
   const buttons = createShoppingListButtons(list);
   
+  console.log(`[SHOP:LIST] About to send message at ${Date.now() - startTime}ms`);
   // Send new public message with the shopping list and buttons
   const message = await interaction.channel.send({ embeds: [embed], components: buttons });
+  console.log(`[SHOP:LIST] Message sent at ${Date.now() - startTime}ms`);
   
   // Update stored message ID and cache
   storage.setMessageId(listId, message.id);
