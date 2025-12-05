@@ -136,7 +136,7 @@ module.exports = {
     }
 
     // ===== OTHER BUTTONS (toggle, clear, refresh) =====
-    // These need to defer first
+    // Defer immediately to avoid timeouts
     try {
       await interaction.deferReply({ flags: 64 });
     } catch (error) {
@@ -154,7 +154,7 @@ module.exports = {
     const { listId, list } = found;
 
     // Queue the operation to prevent race conditions
-    const operation = async () => {
+    queueMessageOperation(messageId, async () => {
       try {
         if (customId.startsWith('toggle_')) {
           const itemId = customId.split('_')[1];
@@ -174,9 +174,7 @@ module.exports = {
           console.error('Failed to edit reply after error:', editError);
         }
       }
-    };
-
-    queueMessageOperation(messageId, operation).catch(err => {
+    }).catch(err => {
       console.error('Queued operation failed:', err);
     });
   }
