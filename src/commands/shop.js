@@ -125,9 +125,7 @@ module.exports = {
 async function handleCreate(interaction) {
   // Defer FIRST before any other operations
   try {
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ flags: 64 });
-    }
+    await interaction.deferReply({ flags: 64 });
   } catch (error) {
     console.error('Failed to defer handleCreate:', error.message);
     return;
@@ -177,9 +175,7 @@ async function handleCreate(interaction) {
 
 async function handleAdd(interaction) {
   try {
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ flags: 64 });
-    }
+    await interaction.deferReply({ flags: 64 });
   } catch (error) {
     console.error('Failed to defer handleAdd:', error.message);
     return;
@@ -250,9 +246,7 @@ async function handleAdd(interaction) {
 async function handleList(interaction) {
   // Defer FIRST immediately to avoid timeout
   try {
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ flags: 64 });
-    }
+    await interaction.deferReply({ flags: 64 });
   } catch (error) {
     console.error('Failed to defer handleList:', error.message);
     return;
@@ -333,9 +327,7 @@ async function handleList(interaction) {
 
 async function handleClear(interaction) {
   try {
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ flags: 64 });
-    }
+    await interaction.deferReply({ flags: 64 });
   } catch (error) {
     console.error('Failed to defer handleClear:', error.message);
     return;
@@ -377,9 +369,7 @@ async function handleClear(interaction) {
 
 async function handleLists(interaction) {
   try {
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ flags: 64 });
-    }
+    await interaction.deferReply({ flags: 64 });
   } catch (error) {
     console.error('Failed to defer handleLists:', error.message);
     return;
@@ -416,9 +406,7 @@ async function handleLists(interaction) {
 
 async function handleHelp(interaction) {
   try {
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ flags: 64 });
-    }
+    await interaction.deferReply({ flags: 64 });
   } catch (error) {
     console.error('Failed to defer handleHelp:', error.message);
     return;
