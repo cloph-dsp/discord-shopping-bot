@@ -16,6 +16,9 @@ const operationLocks = new Map(); // lockId -> Promise
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction) {
+    const startTime = Date.now();
+    console.log(`[INTERACTION_START] ${startTime}`);
+    
     if (interaction.isModalSubmit()) {
       if (interaction.customId.startsWith('addItemModal:')) {
         await handleAddItemModalSubmit(interaction);
@@ -32,7 +35,10 @@ module.exports = {
     // Don't fetch full list data which includes all items (expensive)
     const customId = interaction.customId;
     
+    console.log(`[BUTTON] Received customId: ${customId}`);
+    
     if (customId === 'add_item' || customId === 'edit_item') {
+      console.log(`[BUTTON] Processing modal button: ${customId}`);
       // Quick lookup: only get list ID and title for modals
       let listId, listTitle;
       const dbStartTime = Date.now();
@@ -75,6 +81,7 @@ module.exports = {
         modal.addComponents(new ActionRowBuilder().addComponents(itemsInput));
         
         try {
+          console.log(`[MODAL] About to call showModal at ${Date.now()}`);
           await interaction.showModal(modal);
           console.log(`[MODAL] showModal took ${Date.now() - modalStartTime}ms`);
         } catch (error) {
@@ -120,6 +127,7 @@ module.exports = {
         );
 
         try {
+          console.log(`[MODAL] About to call showModal at ${Date.now()}`);
           await interaction.showModal(modal);
           console.log(`[MODAL] showModal took ${Date.now() - modalStartTime}ms`);
         } catch (error) {
