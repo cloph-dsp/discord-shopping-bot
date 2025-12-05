@@ -23,13 +23,11 @@ class MessageCache {
     // Check cache first
     const cached = this.cache.get(messageId);
     if (cached && !this.isExpired(cached)) {
-      console.log(`📦 Using cached message: ${messageId}`);
       return cached.message;
     }
 
     // Fetch from Discord
     try {
-      console.log(`🔍 Fetching message from Discord: ${messageId}`);
       const message = await channel.messages.fetch(messageId);
       
       // Update cache
@@ -43,7 +41,6 @@ class MessageCache {
     } catch (error) {
       // Message was deleted or not accessible
       if (error.code === 10008 || error.code === 50001) {
-        console.log(`⚠️ Message ${messageId} no longer exists or is inaccessible`);
         this.cache.delete(messageId);
         return null;
       }
