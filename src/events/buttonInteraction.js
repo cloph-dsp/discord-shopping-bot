@@ -44,7 +44,19 @@ module.exports = {
     // ===== MODAL BUTTONS (add_item, edit_item) =====
     // These must be shown within 3 seconds - NO DEFERRED OR OTHER DELAYS
     if (customId === 'add_item' || customId === 'edit_item') {
-      console.log(`[BUTTON] Modal button detected: ${customId}, elapsed: ${Date.now() - startTime}ms`);
+      const elapsed = Date.now() - startTime;
+      console.log(`[BUTTON] Modal button detected: ${customId}, elapsed: ${elapsed}ms`);
+      
+      // Check if interaction is already too old (Discord has 3000ms window)
+      if (elapsed > 2500) {
+        console.error(`[BUTTON] Interaction too old (${elapsed}ms), aborting modal display`);
+        try {
+          await interaction.reply({ content: '⚠️ Button response timeout. Please try again.', flags: 64 });
+        } catch (e) {
+          console.error('Could not send timeout message:', e.message);
+        }
+        return;
+      }
       // Fast path: build modal immediately and show it
       try {
         let modal;
