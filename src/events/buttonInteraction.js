@@ -18,6 +18,9 @@ const truncate = (str, len) => str.length > len ? str.substring(0, len - 3) + '.
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction) {
+    // Only process button or modal interactions
+    if (!interaction.isButton() && !interaction.isModalSubmit()) return;
+
     // Handle modal submissions
     if (interaction.isModalSubmit()) {
       console.log(`[MODAL] Processing modal: ${interaction.customId}`);
@@ -30,11 +33,7 @@ module.exports = {
     }
 
     // Only process button interactions
-    if (!interaction.isButton()) {
-      console.log(`[INTERACTION] Skipping non-button interaction: ${interaction.type}`);
-      return;
-    }
-    
+    if (!interaction.isButton()) return;
     console.log(`[BUTTON] Received button: ${interaction.customId}`);
 
     const customId = interaction.customId;

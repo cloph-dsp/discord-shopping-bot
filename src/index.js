@@ -52,7 +52,7 @@ for (const file of eventFiles) {
 
 // Slash command handler - separate from button/modal interactions
 client.on('interactionCreate', async interaction => {
-  // Handle autocomplete interactions for command options
+  // Only handle autocomplete and slash commands here
   if (interaction.isAutocomplete()) {
     const command = interaction.client.commands.get(interaction.commandName);
     if (command && typeof command.autocomplete === 'function') {
@@ -64,11 +64,11 @@ client.on('interactionCreate', async interaction => {
     }
     return;
   }
-  
-  // Only handle slash commands here
-  // Button and Modal interactions are handled by buttonInteraction.js
+
+  // Ignore buttons and modals (handled by buttonInteraction.js)
   if (!interaction.isChatInputCommand()) return;
 
+  // ...existing code...
   console.log(`[COMMAND] Received: ${interaction.commandName} from ${interaction.user.tag}`);
 
   const command = interaction.client.commands.get(interaction.commandName);
