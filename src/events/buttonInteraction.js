@@ -265,19 +265,20 @@ async function handleRefresh(interaction, listId) {
 // ===== MODAL SUBMISSION HANDLERS =====
 
 async function handleAddItemModalSubmit(interaction) {
-  const [, listId] = interaction.customId.split(':');
-  const itemsRaw = interaction.fields.getTextInputValue('add_item_input').trim();
-  const items = itemsRaw.split(';').map(item => item.trim()).filter(Boolean);
-
-  if (items.length === 0) {
-    return interaction.reply({ content: '❌ Please provide at least one item.', flags: 64 });
-  }
-
+  // Defer IMMEDIATELY before any processing
   try {
     await interaction.deferReply({ flags: 64 });
   } catch (error) {
     console.error('Error deferring modal submit:', error);
     return;
+  }
+
+  const [, listId] = interaction.customId.split(':');
+  const itemsRaw = interaction.fields.getTextInputValue('add_item_input').trim();
+  const items = itemsRaw.split(';').map(item => item.trim()).filter(Boolean);
+
+  if (items.length === 0) {
+    return interaction.editReply({ content: '❌ Please provide at least one item.' });
   }
 
   const list = storage.getList(listId);
@@ -310,18 +311,19 @@ async function handleAddItemModalSubmit(interaction) {
 }
 
 async function handleEditItemModalSubmit(interaction) {
-  const [, listId] = interaction.customId.split(':');
-  const indexStr = interaction.fields.getTextInputValue('edit_item_index').trim();
-  const newText = interaction.fields.getTextInputValue('edit_item_text').trim();
-
-  const index = parseInt(indexStr) - 1;
-
+  // Defer IMMEDIATELY before any processing
   try {
     await interaction.deferReply({ flags: 64 });
   } catch (error) {
     console.error('Error deferring modal submit:', error);
     return;
   }
+
+  const [, listId] = interaction.customId.split(':');
+  const indexStr = interaction.fields.getTextInputValue('edit_item_index').trim();
+  const newText = interaction.fields.getTextInputValue('edit_item_text').trim();
+
+  const index = parseInt(indexStr) - 1;
 
   const list = storage.getList(listId);
   if (!list) {
