@@ -124,7 +124,14 @@ module.exports = {
 
 async function handleCreate(interaction) {
   // Defer FIRST before any other operations
-  await interaction.deferReply({ flags: 64 });
+  try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: 64 });
+    }
+  } catch (error) {
+    console.error('Failed to defer handleCreate:', error.message);
+    return;
+  }
 
   const title = interaction.options.getString('title');
   const itemsString = interaction.options.getString('items');
@@ -169,7 +176,14 @@ async function handleCreate(interaction) {
 }
 
 async function handleAdd(interaction) {
-  await interaction.deferReply({ flags: 64 });
+  try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: 64 });
+    }
+  } catch (error) {
+    console.error('Failed to defer handleAdd:', error.message);
+    return;
+  }
   const itemInput = interaction.options.getString('item');
   const quantity = interaction.options.getInteger('quantity') || 1;
   const channelId = interaction.channel.id;
@@ -235,7 +249,14 @@ async function handleAdd(interaction) {
 
 async function handleList(interaction) {
   // Defer FIRST immediately to avoid timeout
-  await interaction.deferReply({ flags: 64 });
+  try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: 64 });
+    }
+  } catch (error) {
+    console.error('Failed to defer handleList:', error.message);
+    return;
+  }
 
   // Determine target list: by title or current channel's active list
   const titleOption = interaction.options.getString('title');
@@ -311,7 +332,14 @@ async function handleList(interaction) {
 }
 
 async function handleClear(interaction) {
-  await interaction.deferReply({ flags: 64 });
+  try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: 64 });
+    }
+  } catch (error) {
+    console.error('Failed to defer handleClear:', error.message);
+    return;
+  }
   const channelId = interaction.channel.id;
   const active = storage.getActiveList(channelId);
   
@@ -348,7 +376,14 @@ async function handleClear(interaction) {
 }
 
 async function handleLists(interaction) {
-  await interaction.deferReply({ flags: 64 });
+  try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: 64 });
+    }
+  } catch (error) {
+    console.error('Failed to defer handleLists:', error.message);
+    return;
+  }
   
   const allLists = storage.getAllLists();
   
@@ -380,7 +415,14 @@ async function handleLists(interaction) {
 }
 
 async function handleHelp(interaction) {
-  await interaction.deferReply({ flags: 64 });
+  try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: 64 });
+    }
+  } catch (error) {
+    console.error('Failed to defer handleHelp:', error.message);
+    return;
+  }
   const embed = createInstructionEmbed();
   await interaction.editReply({ embeds: [embed], flags: 64 });
 }

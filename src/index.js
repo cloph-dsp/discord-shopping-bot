@@ -44,7 +44,7 @@ for (const file of eventFiles) {
 
 // Handle interactions
 client.on('interactionCreate', async interaction => {
-  console.log(`[INTERACTION] Received: ${interaction.commandName || 'autocomplete'} from ${interaction.user.tag}`);
+  console.log(`[INTERACTION] Received: ${interaction.commandName || 'button/modal'} from ${interaction.user.tag}`);
   
   // Handle autocomplete interactions for command options
   if (interaction.isAutocomplete()) {
@@ -56,6 +56,13 @@ client.on('interactionCreate', async interaction => {
         console.error('Autocomplete error:', error);
       }
     }
+    return;
+  }
+  
+  // Handle button and modal interactions - delegate to loaded event handlers
+  if (interaction.isButton() || interaction.isModalSubmit()) {
+    // These are handled by the loaded events (buttonInteraction.js)
+    // The event handler will be called automatically
     return;
   }
   

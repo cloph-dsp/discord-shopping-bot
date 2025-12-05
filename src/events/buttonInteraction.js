@@ -42,21 +42,14 @@ module.exports = {
 
     console.log(`[BUTTON] ${interaction.user.tag} clicked: ${customId} on list: ${list.title}`);
 
-    // Modal buttons (add/edit) - show immediately with timeout protection
+    // Modal buttons (add/edit) - show immediately without timeout (modals respond instantly)
     if (customId === 'add_item') {
       try {
-        const modalPromise = showAddItemModal(interaction, list, listId);
-        // Add a 2.5 second timeout to ensure we respond within Discord's 3-second window
-        await Promise.race([
-          modalPromise,
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Modal response timeout')), 2500)
-          )
-        ]);
+        await showAddItemModal(interaction, list, listId);
       } catch (error) {
         console.error('Failed to show add modal:', error);
         try {
-          if (!interaction.replied) {
+          if (!interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: '❌ Failed to show add modal. Please try again.', flags: 64 });
           }
         } catch (e) {
@@ -68,22 +61,19 @@ module.exports = {
 
     if (customId === 'edit_item') {
       if (list.items.length === 0) {
-        await interaction.reply({ content: '❌ No items to edit.', flags: 64 });
+        try {
+          await interaction.reply({ content: '❌ No items to edit.', flags: 64 });
+        } catch (e) {
+          console.error('Error replying to edit_item:', e);
+        }
         return;
       }
       try {
-        const modalPromise = showEditItemModal(interaction, list, listId);
-        // Add a 2.5 second timeout to ensure we respond within Discord's 3-second window
-        await Promise.race([
-          modalPromise,
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Modal response timeout')), 2500)
-          )
-        ]);
+        await showEditItemModal(interaction, list, listId);
       } catch (error) {
         console.error('Failed to show edit modal:', error);
         try {
-          if (!interaction.replied) {
+          if (!interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: '❌ Failed to show edit modal. Please try again.', flags: 64 });
           }
         } catch (e) {
