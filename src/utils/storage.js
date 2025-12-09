@@ -113,7 +113,7 @@ class SQLiteShoppingListStorage {
     const text = quantity > 1 ? `${itemText} (${quantity})` : itemText;
     const itemId = this.generateId();
     this.stmts.insertItem.run(itemId, listId, text, 0, Date.now());
-    return this.getItemById(itemId);
+    return this.stmts.getItemById.get(itemId);
   }
 
   removeItem(listId, itemId) {
@@ -123,7 +123,7 @@ class SQLiteShoppingListStorage {
 
   toggleItemChecked(listId, itemId) {
     this.stmts.toggleItem.run(itemId);
-    return this.getItemById(itemId);
+    return this.stmts.getItemById.get(itemId);
   }
 
   clearCompletedItems(listId) {
@@ -133,7 +133,7 @@ class SQLiteShoppingListStorage {
 
   editItem(listId, itemId, newText) {
     const info = this.stmts.editItem.run(newText, itemId);
-    return info.changes > 0 ? this.getItemById(itemId) : null;
+    return info.changes > 0 ? this.stmts.getItemById.get(itemId) : null;
   }
 
   clearList(listId) {
