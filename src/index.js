@@ -14,6 +14,9 @@ const restAgent = new Agent({
   bodyTimeout: 0
 });
 
+const parsedRestTimeout = parseInt(process.env.REST_REQUEST_TIMEOUT_MS || '15000', 10);
+const restTimeout = Number.isFinite(parsedRestTimeout) && parsedRestTimeout >= 3000 ? parsedRestTimeout : 15000;
+
 // Create a new client instance with increased timeout for slow networks
 const client = new Client({
   intents: [
@@ -21,7 +24,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages
   ],
   rest: {
-    timeout: 5000, // Allow a short buffer for HTTP round-trips while keeping responses snappy
+    timeout: restTimeout, // Give enough time for login while remaining configurable
     retries: 0, // Avoid retry delays on interaction responses
     agent: restAgent
   }
