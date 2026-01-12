@@ -1,9 +1,13 @@
 require('dotenv').config();
 const dns = require('dns');
+const https = require('https');
 dns.setDefaultResultOrder('ipv4first');
 const { Client, Collection, GatewayIntentBits, REST } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+
+// Reuse TLS connections to avoid handshake delays when acknowledging interactions
+const keepAliveAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 60_000 });
 
 // Create a new client instance with increased timeout for slow networks
 const client = new Client({
@@ -12,8 +16,9 @@ const client = new Client({
     GatewayIntentBits.GuildMessages
   ],
   rest: {
-    timeout: 15000, // Increase timeout to 15 seconds for slow networks
-    retries: 3 // Retry failed requests up to 3 times
+    timeout: 3000, // Keep requests within Discord's 3s interaction window
+    retries: 0, // Avoid retry delays on interaction responses
+    agent: keepAliveAgent
   }
 });
 

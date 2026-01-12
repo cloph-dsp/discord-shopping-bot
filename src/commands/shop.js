@@ -127,7 +127,7 @@ module.exports = {
 async function handleCreate(interaction) {
   // Defer FIRST before any other operations
   try {
-    await interaction.deferReply({ flags: 64 });
+    await interaction.deferReply({ ephemeral: true });
   } catch (error) {
     console.error('Failed to defer handleCreate:', error.message);
     return;
@@ -177,7 +177,7 @@ async function handleCreate(interaction) {
 
 async function handleAdd(interaction) {
   try {
-    await interaction.deferReply({ flags: 64 });
+    await interaction.deferReply({ ephemeral: true });
   } catch (error) {
     console.error('Failed to defer handleAdd:', error.message);
     return;
@@ -250,7 +250,7 @@ async function handleList(interaction) {
   console.log(`[SHOP:LIST] Starting defer at ${startTime}`);
   // Defer FIRST immediately to avoid timeout
   try {
-    await interaction.deferReply({ flags: 64 });
+    await interaction.deferReply({ ephemeral: true });
     console.log(`[SHOP:LIST] Deferred successfully after ${Date.now() - startTime}ms`);
   } catch (error) {
     console.error(`[SHOP:LIST] Failed to defer after ${Date.now() - startTime}ms:`, error.message);
@@ -336,7 +336,7 @@ async function handleList(interaction) {
 
 async function handleClear(interaction) {
   try {
-    await interaction.deferReply({ flags: 64 });
+    await interaction.deferReply({ ephemeral: true });
   } catch (error) {
     console.error('Failed to defer handleClear:', error.message);
     return;
@@ -378,7 +378,7 @@ async function handleClear(interaction) {
 
 async function handleLists(interaction) {
   try {
-    await interaction.deferReply({ flags: 64 });
+    await interaction.deferReply({ ephemeral: true });
   } catch (error) {
     console.error('Failed to defer handleLists:', error.message);
     return;
@@ -415,13 +415,13 @@ async function handleLists(interaction) {
 
 async function handleHelp(interaction) {
   try {
-    await interaction.deferReply({ flags: 64 });
+    await interaction.deferReply({ ephemeral: true });
   } catch (error) {
     console.error('Failed to defer handleHelp:', error.message);
     return;
   }
   const embed = createInstructionEmbed();
-  await interaction.editReply({ embeds: [embed], flags: 64 });
+  await interaction.editReply({ embeds: [embed] });
 }
 
 // Reaction helpers removed in favor of button + modal workflows
