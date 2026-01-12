@@ -1,13 +1,19 @@
 require('dotenv').config();
 const dns = require('dns');
-const https = require('https');
+const { Agent } = require('undici');
 dns.setDefaultResultOrder('ipv4first');
 const { Client, Collection, GatewayIntentBits, REST } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
 // Reuse TLS connections to avoid handshake delays when acknowledging interactions
-const keepAliveAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 60_000 });
+const restAgent = new Agent({
+  connect: { timeout: 1500 },
+  keepAliveTimeout: 60_000,
+  keepAliveMaxTimeout: 120_000,
+  headersTimeout: 3_000,
+  bodyTimeout: 0
+});
 
 // Create a new client instance with increased timeout for slow networks
 const client = new Client({
@@ -16,9 +22,9 @@ const client = new Client({
     GatewayIntentBits.GuildMessages
   ],
   rest: {
-    timeout: 3000, // Keep requests within Discord's 3s interaction window
+    timeout: 2500, // Keep requests safely within Discord's 3s interaction window
     retries: 0, // Avoid retry delays on interaction responses
-    agent: keepAliveAgent
+    agent: restAgent
   }
 });
 
@@ -96,3 +102,13 @@ client.login(process.env.DISCORD_TOKEN).catch(error => {
   console.error('Failed to login to Discord:', error);
   process.exit(1);
 });
+
+const gracefulShutdown = signal => {
+  console.log(`${signal} received, shutting down gracefully...`);
+  client.destroy();
+  restAgent.close();
+  process.exit(0);
+};
+
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
