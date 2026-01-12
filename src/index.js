@@ -8,10 +8,9 @@ const path = require('path');
 
 // Reuse TLS connections to avoid handshake delays when acknowledging interactions
 const restAgent = new Agent({
-  connect: { timeout: 1500 },
   keepAliveTimeout: 60_000,
   keepAliveMaxTimeout: 120_000,
-  headersTimeout: 3_000,
+  headersTimeout: 5_000,
   bodyTimeout: 0
 });
 
@@ -22,7 +21,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages
   ],
   rest: {
-    timeout: 2500, // Keep requests safely within Discord's 3s interaction window
+    timeout: 5000, // Allow a short buffer for HTTP round-trips while keeping responses snappy
     retries: 0, // Avoid retry delays on interaction responses
     agent: restAgent
   }
@@ -100,6 +99,10 @@ client.on('disconnect', () => {
 // Login to Discord with your client's token
 client.login(process.env.DISCORD_TOKEN).catch(error => {
   console.error('Failed to login to Discord:', error);
+  restAgent.close();
+  if (client.restKeepAliveInterval) {
+    clearInterval(client.restKeepAliveInterval);
+  }
   process.exit(1);
 });
 
@@ -107,6 +110,9 @@ const gracefulShutdown = signal => {
   console.log(`${signal} received, shutting down gracefully...`);
   client.destroy();
   restAgent.close();
+  if (client.restKeepAliveInterval) {
+    clearInterval(client.restKeepAliveInterval);
+  }
   process.exit(0);
 };
 
