@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { createTestEmbed, addTestReactions } = require('../utils/test-reactions');
 
 module.exports = {
@@ -34,7 +34,7 @@ module.exports = {
       console.error('Error in test command:', error);
       await interaction.reply({ 
         content: `❌ Test failed: ${error.message}`, 
-        ephemeral: true 
+        flags: MessageFlags.Ephemeral 
       });
     }
   },

@@ -3,7 +3,8 @@ const {
   Events,
   ModalBuilder,
   TextInputBuilder,
-  TextInputStyle
+  TextInputStyle,
+  MessageFlags
 } = require('discord.js');
 const storage = require('../utils/storage');
 const { createShoppingListEmbed } = require('../utils/embeds');
@@ -53,9 +54,9 @@ module.exports = {
         console.error('Stack trace:', error.stack);
         try {
           if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'There was an error while executing this command!', ephemeral: true });
+            await interaction.followUp({ content: 'There was an error while executing this command!', flags: MessageFlags.Ephemeral });
           } else {
-            await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+            await interaction.reply({ content: 'There was an error while executing this command!', flags: MessageFlags.Ephemeral });
           }
         } catch (followUpError) {
           console.error('Error sending error message:', followUpError);
@@ -91,7 +92,7 @@ module.exports = {
       if (elapsed > 2500) {
         console.error(`[BUTTON] Interaction too old (${elapsed}ms), aborting modal display`);
         try {
-          await interaction.reply({ content: '⚠️ Button response timeout. Please try again.', ephemeral: true });
+          await interaction.reply({ content: '⚠️ Button response timeout. Please try again.', flags: MessageFlags.Ephemeral });
         } catch (e) {
           console.error('Could not send timeout message:', e.message);
         }
@@ -107,7 +108,7 @@ module.exports = {
           if (!row) {
             return interaction.reply({
               content: '❌ This shopping list no longer exists.',
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
           }
 
@@ -133,7 +134,7 @@ module.exports = {
           if (!row) {
             return interaction.reply({
               content: '❌ This shopping list no longer exists.',
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
           }
 
@@ -143,7 +144,7 @@ module.exports = {
           // Check if there are items to edit
           const itemCount = storage.db.prepare('SELECT COUNT(*) as count FROM items WHERE listId = ?').get(listId);
           if (itemCount.count === 0) {
-            return interaction.reply({ content: '❌ No items to edit.', ephemeral: true });
+            return interaction.reply({ content: '❌ No items to edit.', flags: MessageFlags.Ephemeral });
           }
 
           // Build modal
@@ -182,7 +183,7 @@ module.exports = {
         console.error(`Error showing modal for button ${customId}:`, error.message);
         try {
           if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ Failed to open form. Try again.', ephemeral: true });
+            await interaction.reply({ content: '❌ Failed to open form. Try again.', flags: MessageFlags.Ephemeral });
           }
         } catch (e) {
           console.error('Could not send error reply:', e.message);
@@ -195,7 +196,7 @@ module.exports = {
     // Defer immediately to avoid timeouts
     console.log(`[BUTTON] Non-modal button detected: ${customId}, elapsed: ${Date.now() - startTime}ms, about to defer...`);
     try {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       console.log(`[BUTTON] Deferred successfully for ${customId}, elapsed: ${Date.now() - startTime}ms`);
     } catch (error) {
       console.error(`[BUTTON] Error deferring interaction for ${customId}, elapsed: ${Date.now() - startTime}ms:`, error.message);
@@ -307,7 +308,7 @@ async function handleRefresh(interaction, listId) {
 async function handleAddItemModalSubmit(interaction) {
   // Defer IMMEDIATELY before any processing
   try {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   } catch (error) {
     console.error('Error deferring modal submit:', error);
     return;
@@ -353,7 +354,7 @@ async function handleAddItemModalSubmit(interaction) {
 async function handleEditItemModalSubmit(interaction) {
   // Defer IMMEDIATELY before any processing
   try {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   } catch (error) {
     console.error('Error deferring modal submit:', error);
     return;
