@@ -25,7 +25,9 @@ A Discord bot that creates interactive shopping lists using emoji reactions for 
 - `/shop list [title]` - Display a shopping list (with autocomplete for list names)
 - `/shop lists` - Show all available shopping lists with their status
 - `/shop clear` - Clear items from the active shopping list
-- `/shop help` - Show help and instructions## Installation
+- `/shop help` - Show help and instructions
+
+## Installation
 
 1. Clone this repository
 2. Run `npm install`

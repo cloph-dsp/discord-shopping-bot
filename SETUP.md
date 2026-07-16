@@ -1,7 +1,7 @@
 # Discord Shopping List Bot Setup Guide
 
 ## Prerequisites
-- Node.js 16.x or higher
+- Node.js 20.x or higher (required by `better-sqlite3` 12.x)
 - A Discord application and bot token
 - Basic knowledge of Discord bot setup
 
@@ -76,20 +76,20 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
 - `/shop clear` - Clear the shopping list
 - `/shop channel #shopping` - Set shopping channel
 
-### Emoji Interactions
-Once you have a shopping list, use these emoji reactions:
+### Button Interactions
+Lists are interactive — each item has a check button. Other action buttons sit under the list:
 
-1. **🛒 Add to Cart**: Click to mark item as picked up (becomes ~~strikethrough~~)
-2. **✅ Purchase**: Click to confirm purchase and remove from list (only works on items already in cart)
-3. **🗑️ Delete**: Remove item without purchasing
-4. **✏️ Edit**: Modify an existing item
+1. **Item buttons**: Click to toggle checked / unchecked (embeds show ⬜ unchecked, ✅ checked)
+2. **➕ Add Items**: Opens a modal to add new items (separate multiple with `;`)
+3. **✏️ Edit Item**: Opens a modal to edit an item by its number
+4. **🧹 Clear Done**: Removes all checked items at once
+5. **🔄 Refresh**: Re-renders the list message
 
 ### Workflow
 1. Create a shopping list: `/shop create "Weekly Groceries" milk;bread;eggs`
-2. As you shop, click 🛒 to add items to your cart
-3. When you've purchased items, click ✅ to remove them from the list
-4. Use 🗑️ to remove items you don't need anymore
-5. Use ✏️ to edit item names or quantities
+2. As you shop, click item buttons to mark items done (they flip to ✅)
+3. When you're finished, click 🧹 to clear all checked items
+4. Use ➕ to add items you forgot; ✏️ to fix typos in item names
 
 ## Features
 
@@ -130,20 +130,24 @@ Once you have a shopping list, use these emoji reactions:
 ```
 src/
 ├── commands/
-│   └── shop.js          # Main shopping commands
+│   ├── shop.js          # Main shopping commands (create/add/list/clear/lists/help)
+│   └── test.js          # Developer reaction-test utility
 ├── events/
-│   ├── ready.js         # Bot ready event
-│   └── messageReactionAdd.js  # Reaction handling
+│   ├── ready.js         # Bot ready event (REST warmup + keep-alive)
+│   └── interactionCreate.js  # Button + modal handler
 └── utils/
-    ├── storage.js       # In-memory data storage
-    └── embeds.js        # Discord embed formatting
+    ├── storage.js       # SQLite persistence (better-sqlite3)
+    ├── embeds.js        # Discord embed formatting
+    ├── buttons.js       # Button row builders
+    ├── messageCache.js  # Short-lived message cache
+    └── test-reactions.js # Reaction helpers for test command
 ```
 
 ### Adding Features
-- Storage is currently in-memory (resets on restart)
-- For persistence, consider adding MongoDB, SQLite, or JSON file storage
+- Storage is persistent via SQLite at `data/storage.db`
 - Embeds can be customized in `src/utils/embeds.js`
 - Commands can be extended in `src/commands/shop.js`
+- Button handlers live in `src/events/interactionCreate.js`
 
 ## License
 MIT License - Feel free to modify and distribute!
