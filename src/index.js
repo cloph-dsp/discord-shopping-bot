@@ -10,8 +10,9 @@ const path = require('path');
 const restAgent = new Agent({
   keepAliveTimeout: 60_000,
   keepAliveMaxTimeout: 120_000,
-  headersTimeout: 5_000,
-  bodyTimeout: 0
+  headersTimeout: 30_000,
+  bodyTimeout: 0,
+  connect: { timeout: 30_000 }
 });
 
 const parsedRestTimeout = parseInt(process.env.REST_REQUEST_TIMEOUT_MS || '15000', 10);
@@ -24,8 +25,8 @@ const client = new Client({
     GatewayIntentBits.GuildMessages
   ],
   rest: {
-    timeout: restTimeout, // Give enough time for login while remaining configurable
-    retries: 0, // Avoid retry delays on interaction responses
+    timeout: restTimeout,
+    retries: 2, // Allow retries for transient network failures
     agent: restAgent
   }
 });
@@ -61,9 +62,7 @@ for (const file of eventFiles) {
   }
 }
 
-// All interaction handling is now in separate event files:
-//   - commandInteraction.js for slash commands and autocomplete
-//   - buttonInteraction.js for buttons and modals
+// All interaction handling is now in src/events/interactionCreate.js
 
 // Handle connection errors and resilience
 client.on('error', error => {
@@ -94,9 +93,9 @@ client.on('shardResume', (id, replayedEvents) => {
   console.log(`Shard ${id} resumed (replayed ${replayedEvents} events)`);
 });
 
-// Auto-reconnect on disconnect
+// Discord.js handles reconnection automatically; this is informational only.
 client.on('disconnect', () => {
-  console.warn('Bot disconnected, attempting to reconnect...');
+  console.warn('Bot disconnected, gateway will auto-reconnect');
 });
 
 // Login to Discord with your client's token
@@ -108,6 +107,18 @@ client.login(process.env.DISCORD_TOKEN).catch(error => {
   }
   process.exit(1);
 });
+
+// Log unhandled rejections, then exit so the supervisor restarts us cleanly.
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('unhandledRejection');
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  gracefulShutdown('uncaughtException');
+});
+
+
 
 const gracefulShutdown = signal => {
   console.log(`${signal} received, shutting down gracefully...`);

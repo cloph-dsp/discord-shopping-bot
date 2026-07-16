@@ -11,10 +11,17 @@ const { createShoppingListEmbed } = require('../utils/embeds');
 const { createShoppingListButtons, disableAllButtons } = require('../utils/buttons');
 const messageCache = require('../utils/messageCache');
 
-// Track ongoing operations per message to prevent race conditions
-const operationLocks = new Map();
+// ponytail: removed queueMessageOperation (caused deadlocks).
+// DB ops are sync, Discord message.edit is idempotent — no queue needed.
 
 const truncate = (str, len) => str.length > len ? str.substring(0, len - 3) + '...' : str;
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms))
+  ]);
+}
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -104,7 +111,7 @@ module.exports = {
 
         if (customId === 'add_item') {
           // Get list ID and title synchronously (0ms operation)
-          const row = storage.db.prepare('SELECT id, title FROM lists WHERE messageId = ?').get(messageId);
+          const row = storage.getListIdAndTitleByMessageId(messageId);
           if (!row) {
             return interaction.reply({
               content: '❌ This shopping list no longer exists.',
@@ -130,7 +137,7 @@ module.exports = {
           modal.addComponents(new ActionRowBuilder().addComponents(itemsInput));
         } else if (customId === 'edit_item') {
           // Get list ID and title synchronously
-          const row = storage.db.prepare('SELECT id, title FROM lists WHERE messageId = ?').get(messageId);
+          const row = storage.getListIdAndTitleByMessageId(messageId);
           if (!row) {
             return interaction.reply({
               content: '❌ This shopping list no longer exists.',
@@ -142,8 +149,8 @@ module.exports = {
           const listTitle = row.title;
 
           // Check if there are items to edit
-          const itemCount = storage.db.prepare('SELECT COUNT(*) as count FROM items WHERE listId = ?').get(listId);
-          if (itemCount.count === 0) {
+          const itemCount = storage.countItemsByListId(listId);
+          if (itemCount === 0) {
             return interaction.reply({ content: '❌ No items to edit.', flags: MessageFlags.Ephemeral });
           }
 
@@ -212,36 +219,35 @@ module.exports = {
 
     const { listId, list } = found;
 
-    // Queue the operation to prevent race conditions
-    queueMessageOperation(messageId, async () => {
-      try {
-        if (customId.startsWith('toggle_')) {
-          const itemId = customId.split('_')[1];
-          await handleToggleItem(interaction, listId, itemId);
-        } else if (customId === 'clear_completed') {
-          await handleClearCompleted(interaction, listId);
-        } else if (customId === 'refresh_list') {
-          await handleRefresh(interaction, listId);
-        }
-      } catch (error) {
-        console.error('Error in button operation:', error);
-        try {
-          await interaction.editReply({
-            content: '❌ An error occurred while processing your request.'
-          });
-        } catch (editError) {
-          console.error('Failed to edit reply after error:', editError);
-        }
+    // Run operation directly (queue removed — was causing deadlocks)
+    try {
+      if (customId.startsWith('toggle_')) {
+        const itemId = customId.split('_')[1];
+        console.log(`[TOGGLE] Starting toggle for item ${itemId}`);
+        await withTimeout(handleToggleItem(interaction, listId, itemId), 10000, `toggle ${itemId}`);
+        console.log(`[TOGGLE] Completed toggle for item ${itemId}`);
+      } else if (customId === 'clear_completed') {
+        await withTimeout(handleClearCompleted(interaction, listId), 10000, 'clear_completed');
+      } else if (customId === 'refresh_list') {
+        await withTimeout(handleRefresh(interaction, listId), 10000, 'refresh_list');
       }
-    }).catch(err => {
-      console.error('Queued operation failed:', err);
-    });
+    } catch (error) {
+      console.error('Error in button operation:', error);
+      try {
+        await interaction.editReply({
+          content: '❌ An error occurred while processing your request.'
+        });
+      } catch (editError) {
+        console.error('Failed to edit reply after error:', editError);
+      }
+    }
   }
 };
 
 // ===== BUTTON OPERATION HANDLERS =====
 
 async function handleToggleItem(interaction, listId, itemId) {
+  console.log(`[TOGGLE:H] handleToggleItem start listId=${listId}`);
   const list = storage.getList(listId);
   if (!list) {
     await interaction.editReply({ content: '❌ List not found.' });
@@ -254,11 +260,14 @@ async function handleToggleItem(interaction, listId, itemId) {
     return;
   }
 
+  console.log(`[TOGGLE:H] resolveChannel start`);
   const channel = await resolveChannel(interaction.client, list.channelId, interaction.channel);
-  await disableButtonsOnMessage(list, channel);
+  console.log(`[TOGGLE:H] resolveChannel done`);
 
   const updatedItem = storage.toggleItemChecked(listId, itemId);
-  await refreshListMessage(interaction.client, listId, channel);
+  console.log(`[TOGGLE:H] toggle done, refreshListMessage start`);
+  await refreshListMessage(interaction.client, listId, channel, false);
+  console.log(`[TOGGLE:H] refreshListMessage done`);
 
   const isCheckedNow = updatedItem ? updatedItem.checked : !item.checked;
   const emoji = isCheckedNow ? '✅' : '⬜';
@@ -277,10 +286,9 @@ async function handleClearCompleted(interaction, listId) {
   }
 
   const channel = await resolveChannel(interaction.client, list.channelId, interaction.channel);
-  await disableButtonsOnMessage(list, channel);
 
   const clearedCount = storage.clearCompletedItems(listId);
-  await refreshListMessage(interaction.client, listId, channel);
+  await refreshListMessage(interaction.client, listId, channel, false);
 
   if (clearedCount > 0) {
     await interaction.editReply({ content: `🧹 Cleared ${clearedCount} completed item${clearedCount === 1 ? '' : 's'}!` });
@@ -297,8 +305,7 @@ async function handleRefresh(interaction, listId) {
   }
 
   const channel = await resolveChannel(interaction.client, list.channelId, interaction.channel);
-  await disableButtonsOnMessage(list, channel);
-  await refreshListMessage(interaction.client, listId, channel);
+  await refreshListMessage(interaction.client, listId, channel, false);
 
   await interaction.editReply({ content: '🔄 List refreshed!' });
 }
@@ -328,17 +335,13 @@ async function handleAddItemModalSubmit(interaction) {
     return;
   }
 
-  const lockId = list.messageId || `list:${listId}`;
-
   try {
-    await queueMessageOperation(lockId, async () => {
-      const currentList = storage.getList(listId);
-      if (!currentList) return;
-      const channel = await resolveChannel(interaction.client, currentList.channelId, interaction.channel);
-      await disableButtonsOnMessage(currentList, channel);
-      items.forEach(item => storage.addItem(listId, item));
-      await refreshListMessage(interaction.client, listId, channel);
-    });
+    const channel = await withTimeout(
+      resolveChannel(interaction.client, list.channelId, interaction.channel),
+      5000, 'resolve channel add'
+    );
+    items.forEach(item => storage.addItem(listId, item));
+    await withTimeout(refreshListMessage(interaction.client, listId, channel, false), 10000, 'refresh add');
 
     const resultText = items.length === 1
       ? `➕ Added "${items[0]}" to the shopping list.`
@@ -379,16 +382,12 @@ async function handleEditItemModalSubmit(interaction) {
 
   try {
     const targetItem = list.items[index];
-    const lockId = list.messageId || `list:${listId}`;
-
-    await queueMessageOperation(lockId, async () => {
-      const currentList = storage.getList(listId);
-      if (!currentList) return;
-      const channel = await resolveChannel(interaction.client, currentList.channelId, interaction.channel);
-      await disableButtonsOnMessage(currentList, channel);
-      storage.editItem(listId, targetItem.id, newText);
-      await refreshListMessage(interaction.client, listId, channel);
-    });
+    const channel = await withTimeout(
+      resolveChannel(interaction.client, list.channelId, interaction.channel),
+      5000, 'resolve channel edit'
+    );
+    storage.editItem(listId, targetItem.id, newText);
+    await withTimeout(refreshListMessage(interaction.client, listId, channel, false), 10000, 'refresh edit');
 
     await interaction.editReply({ content: `✏️ Updated "${targetItem.text}" → "${newText}".` });
   } catch (error) {
@@ -399,47 +398,34 @@ async function handleEditItemModalSubmit(interaction) {
 
 // ===== UTILITY FUNCTIONS =====
 
-async function disableButtonsOnMessage(list, channel) {
-  if (!list?.messageId || !channel) return null;
-
-  try {
-    const message = await messageCache.getMessage(channel, list.messageId);
-    if (!message) {
-      storage.clearListMessage(list.id);
-      return null;
-    }
-
-    const disabledRows = disableAllButtons(createShoppingListButtons(list));
-    await message.edit({ embeds: [createShoppingListEmbed(list)], components: disabledRows });
-    messageCache.updateCache(message);
-    return message;
-  } catch (error) {
-    console.error('Failed to disable buttons:', error);
-    return null;
-  }
-}
-
-async function refreshListMessage(client, listId, channelHint) {
+async function refreshListMessage(client, listId, channelHint, disableButtons = false) {
   const list = storage.getList(listId);
   if (!list || !list.messageId) {
+    console.log(`[REFRESH] no list or messageId for ${listId}`);
     return null;
   }
 
+  console.log(`[REFRESH] resolveChannel start`);
   const channel = await resolveChannel(client, list.channelId, channelHint);
   if (!channel) {
+    console.log(`[REFRESH] no channel`);
     return null;
   }
+  console.log(`[REFRESH] resolveChannel done, fetching message`);
 
   try {
-    const message = await messageCache.getMessage(channel, list.messageId);
+    const message = await withTimeout(messageCache.getMessage(channel, list.messageId), 5000, 'fetch message');
+    console.log(`[REFRESH] message fetched: ${!!message}`);
     if (!message) {
       storage.clearListMessage(listId);
       return null;
     }
 
     const embed = createShoppingListEmbed(list);
-    const buttons = createShoppingListButtons(list);
-    await message.edit({ embeds: [embed], components: buttons });
+    const buttons = disableButtons
+      ? disableAllButtons(createShoppingListButtons(list))
+      : createShoppingListButtons(list);
+    await withTimeout(message.edit({ embeds: [embed], components: buttons }), 5000, 'edit message');
     messageCache.updateCache(message);
     return message;
   } catch (error) {
@@ -452,23 +438,14 @@ async function resolveChannel(client, channelId, fallbackChannel) {
   if (!channelId) return fallbackChannel;
 
   try {
-    return await client.channels.fetch(channelId);
+    console.log(`[RESOLVE] fetching channel ${channelId}`);
+    const result = await withTimeout(client.channels.fetch(channelId), 5000, 'fetch channel');
+    console.log(`[RESOLVE] fetched channel ${channelId}`);
+    return result;
   } catch (error) {
-    console.log('Could not fetch channel, using fallback');
+    console.log('Could not fetch channel, using fallback:', error.message);
     return fallbackChannel;
   }
 }
 
-function queueMessageOperation(lockId, task) {
-  if (!operationLocks.has(lockId)) {
-    operationLocks.set(lockId, Promise.resolve());
-  }
 
-  const currentLock = operationLocks.get(lockId);
-  const newLock = currentLock.then(() => task()).catch(err => {
-    console.error('Operation error:', err);
-  });
-
-  operationLocks.set(lockId, newLock);
-  return newLock;
-}

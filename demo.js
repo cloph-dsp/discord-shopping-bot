@@ -8,26 +8,27 @@ console.log('🛒 Discord Shopping Bot Demo\n');
 
 // Test storage functionality
 console.log('Creating test shopping list...');
-const testList = storage.createList('test-channel', 'Weekly Groceries', [
+const testList = storage.createList('Weekly Groceries', [
   'Milk (2 liters)',
   'Bread',
   'Eggs (dozen)',
   'Apples',
   'Chicken breast'
 ]);
+const listId = testList.id;
 
 console.log('✅ Created list:', testList.title);
 console.log('📝 Items:', testList.items.length);
 
 // Test adding items
 console.log('\nAdding orange juice...');
-storage.addItem('test-channel', 'Orange juice', 1);
+storage.addItem(listId, 'Orange juice', 1);
 
 // Test checking items
 console.log('\nChecking milk...');
 const milk = testList.items.find(item => item.text.includes('Milk'));
 if (milk) {
-  storage.toggleItemChecked('test-channel', milk.id);
+  storage.toggleItemChecked(listId, milk.id);
   console.log('✅ Milk checked');
 }
 
@@ -35,14 +36,14 @@ if (milk) {
 console.log('\nChecking bread and clearing completed...');
 const bread = testList.items.find(item => item.text.includes('Bread'));
 if (bread) {
-  storage.toggleItemChecked('test-channel', bread.id);
+  storage.toggleItemChecked(listId, bread.id);
   console.log('✅ Bread checked');
-  const clearedCount = storage.clearCompletedItems('test-channel');
+  const clearedCount = storage.clearCompletedItems(listId);
   console.log(`🧹 Cleared ${clearedCount} completed items`);
 }
 
 // Show final state
-const finalList = storage.getList('test-channel');
+const finalList = storage.getList(listId);
 console.log('\n📋 Final list state:');
 console.log('Total items:', finalList.items.length);
 console.log('Items checked:', finalList.items.filter(item => item.checked).length);
