@@ -138,7 +138,7 @@ class SQLiteShoppingListStorage {
 
   clearList(listId) {
     const info = this.stmts.clearListItems.run(listId);
-    return true;
+    return info.changes ?? 0;
   }
 
   setMessageId(listId, messageId) {
@@ -157,19 +157,24 @@ class SQLiteShoppingListStorage {
   }
 
   generateId() {
-    try { return crypto.randomUUID(); } catch (e) { return Math.random().toString(36).substr(2, 9); }
-  }
-
-  getItemByIndex(listId, index) {
-    const items = this.stmts.getItemsForList.all(listId);
-    if (!items || index < 0 || index >= items.length) return null;
-    return items[index];
+    try { return crypto.randomUUID(); } catch (e) { return crypto.randomBytes(16).toString('hex'); }
   }
 
   getListByMessageId(messageId) {
     const row = this.stmts.getListByMessageId.get(messageId);
     if (!row) return null;
     return { listId: row.id, list: this._rowToList(row) };
+  }
+
+  getListIdAndTitleByMessageId(messageId) {
+    const row = this.stmts.getListByMessageId.get(messageId);
+    if (!row) return null;
+    return { id: row.id, title: row.title };
+  }
+
+  countItemsByListId(listId) {
+    const row = this.db.prepare('SELECT COUNT(*) as count FROM items WHERE listId = ?').get(listId);
+    return row ? row.count : 0;
   }
 
   getAllListTitles() {
@@ -190,11 +195,6 @@ class SQLiteShoppingListStorage {
   getShoppingChannel(guildId) {
     const row = this.db.prepare('SELECT shoppingChannel FROM settings WHERE guildId = ?').get(guildId);
     return row ? row.shoppingChannel : null;
-  }
-
-  getListByChannel(channelId) {
-    const active = this.getActiveList(channelId);
-    return active ? active.list : null;
   }
 
   _rowToList(row) {
