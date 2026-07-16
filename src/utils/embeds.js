@@ -1,25 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
 
-// Emojis used for reactions
-
-// Number emojis 1-10
-const NUMBER_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-// Regional indicator letters 🇦-🇿 (A-Z)
-const LETTER_EMOJIS = [
-  '🇦','🇧','🇨','🇩','🇪','🇫','🇬','🇭','🇮','🇯','🇰','🇱','🇲','🇳','🇴','🇵','🇶','🇷','🇸','🇹','🇺','🇻','🇼','🇽','🇾','🇿'
-];
-// Special symbols for 37-50 (pick visually distinct, non-conflicting emojis)
-const EXTRA_EMOJIS = [
-  '🅰️','🅱️','🆎','🆑','🆒','🆓','🆔','🆕','🆖','🆗','🆘','🆙','🆚','🈁','🈂️','🈷️','🈶','🈯️','🉐','🈹','🈚','🈸','🈺','🈳'
-];
-
-const EMOJIS = {
-  ITEM: [...NUMBER_EMOJIS, ...LETTER_EMOJIS, ...EXTRA_EMOJIS],
-  CLEAR_COMPLETED: '🧹',  // Clear all checked items
-  ADD_ITEM: '➕',         // Add new item
-  EDIT: '✏️'              // Edit mode
-};
-
 function createShoppingListEmbed(list) {
   const checkedItems = list.items.filter(item => item.checked);
   const totalItems = list.items.length;
@@ -131,7 +111,6 @@ function createInstructionEmbed() {
 }
 
 module.exports = {
-  EMOJIS,
   createShoppingListEmbed,
   createInstructionEmbed
 };

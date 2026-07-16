@@ -26,9 +26,15 @@ class MessageCache {
       return cached.message;
     }
 
-    // Fetch from Discord
+    // Fetch from Discord with timeout to prevent indefinite hangs
     try {
-      const message = await channel.messages.fetch(messageId);
+      console.log(`[CACHE:F] Fetching message ${messageId}`);
+      const fetchPromise = channel.messages.fetch(messageId);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Message fetch timeout')), 5000)
+      );
+      const message = await Promise.race([fetchPromise, timeoutPromise]);
+      console.log(`[CACHE:F] Fetched message ${messageId}`);
       
       // Update cache
       this.cache.set(messageId, {
@@ -48,17 +54,6 @@ class MessageCache {
       // Other error - rethrow
       throw error;
     }
-  }
-
-  /**
-   * Validate that a message still exists
-   * @param {Channel} channel - Discord channel
-   * @param {string} messageId - Message ID to validate
-   * @returns {Promise<boolean>} True if message exists
-   */
-  async validateMessage(channel, messageId) {
-    const message = await this.getMessage(channel, messageId);
-    return message !== null;
   }
 
   /**
@@ -103,41 +98,17 @@ class MessageCache {
   cleanupExpired() {
     const now = Date.now();
     let cleaned = 0;
-    
+
     for (const [messageId, cached] of this.cache.entries()) {
       if (now - cached.lastFetched > this.CACHE_TTL) {
         this.cache.delete(messageId);
         cleaned++;
       }
     }
-    
+
     if (cleaned > 0) {
       console.log(`🧹 Cleaned up ${cleaned} expired cache entries`);
     }
-  }
-
-  /**
-   * Get cache statistics
-   * @returns {Object} Cache stats
-   */
-  getStats() {
-    return {
-      size: this.cache.size,
-      entries: Array.from(this.cache.entries()).map(([id, cached]) => ({
-        messageId: id,
-        channelId: cached.channelId,
-        age: Math.round((Date.now() - cached.lastFetched) / 1000)
-      }))
-    };
-  }
-
-  /**
-   * Clear all cache
-   */
-  clear() {
-    const size = this.cache.size;
-    this.cache.clear();
-    console.log(`🗑️ Cleared ${size} cached messages`);
   }
 }
 

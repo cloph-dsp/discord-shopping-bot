@@ -50,11 +50,6 @@ function createShoppingListButtons(list) {
     rows.push(row);
   }
   
-  // If there are more than 20 items, add a note
-  if (list.items.length > 20) {
-    // Show remaining items in embed description instead
-    // This is a limitation of Discord's button system
-  }
   
   // Create control buttons row
   const controlRow = new ActionRowBuilder();
