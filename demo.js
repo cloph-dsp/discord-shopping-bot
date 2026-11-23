@@ -1,12 +1,19 @@
-// Demo script to test the shopping bot functionality locally
-// This simulates the bot's features for testing
+// Demo script: runs against a throwaway SQLite DB, never the production one.
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsb-demo-'));
+process.env.DSB_DATA_DIR = tempDir;
+
+process.on('exit', () => {
+  try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* best effort */ }
+});
 
 const storage = require('./src/utils/storage');
-const { createShoppingListEmbed } = require('./src/utils/embeds');
 
-console.log('🛒 Discord Shopping Bot Demo\n');
+console.log('🛒 Discord Shopping Bot Demo (temporary database)\n');
 
-// Test storage functionality
 console.log('Creating test shopping list...');
 const testList = storage.createList('Weekly Groceries', [
   'Milk (2 liters)',
@@ -20,11 +27,9 @@ const listId = testList.id;
 console.log('✅ Created list:', testList.title);
 console.log('📝 Items:', testList.items.length);
 
-// Test adding items
 console.log('\nAdding orange juice...');
 storage.addItem(listId, 'Orange juice', 1);
 
-// Test checking items
 console.log('\nChecking milk...');
 const milk = testList.items.find(item => item.text.includes('Milk'));
 if (milk) {
@@ -32,7 +37,6 @@ if (milk) {
   console.log('✅ Milk checked');
 }
 
-// Test clearing completed items
 console.log('\nChecking bread and clearing completed...');
 const bread = testList.items.find(item => item.text.includes('Bread'));
 if (bread) {
@@ -42,16 +46,10 @@ if (bread) {
   console.log(`🧹 Cleared ${clearedCount} completed items`);
 }
 
-// Show final state
 const finalList = storage.getList(listId);
 console.log('\n📋 Final list state:');
 console.log('Total items:', finalList.items.length);
 console.log('Items checked:', finalList.items.filter(item => item.checked).length);
 console.log('Items unchecked:', finalList.items.filter(item => !item.checked).length);
 
-console.log('\n🎉 Demo completed! The bot is ready to use in Discord.');
-console.log('\nNext steps:');
-console.log('1. Set up your Discord bot token in .env');
-console.log('2. Run: npm run deploy');
-console.log('3. Run: npm start');
-console.log('4. Invite the bot to your server and use /shop commands!');
+console.log('\n🎉 Demo completed. Production database was not touched.');

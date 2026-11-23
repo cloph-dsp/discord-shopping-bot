@@ -1,139 +1,228 @@
-# Discord Shopping List Bot - Visual Example
+# Visual Example
 
-## How It Works - Step by Step
+Text mockups of what the bot posts in Discord. Embed colours and button styles are noted; everything else is the literal text.
 
-### 1. Create a Shopping List
+Legend:
+
+- Item buttons: `⬜` grey (unchecked), `✅` green (checked)
+- `➕ Add`: blurple, `🧹 Clear Done`: red, `✏️ Edit` / `🔄 Refresh`: grey
+- `/shop` replies are ephemeral and visible only to the person who ran the command
+
+## 1. Create a list
+
 ```
-User: /shop create "Weekly Groceries" milk;bread;eggs;apples
-
-Bot Response:
-╭─────────────────────────────────╮
-│ 🛒 Weekly Groceries             │
-│                                 │
-│ 1️⃣ ⬜ milk                      │
-│ 2️⃣ ⬜ bread                     │
-│ 3️⃣ ⬜ eggs                      │
-│ 4️⃣ ⬜ apples                    │
-│                                 │
-│ Click number emojis to check/   │
-│ uncheck items • ➕ Add item •   │
-│ ✏️ Edit                         │
-╰─────────────────────────────────╯
-Reactions: 1️⃣ 2️⃣ 3️⃣ 4️⃣ ➕ ✏️
+/shop create title: Weekly Groceries items: milk;bread;eggs;apples
 ```
 
-### 2. User Clicks 1️⃣ (Check milk)
-```
-Bot: "✅ user checked: milk"
+Ephemeral reply:
 
-Updated List:
-╭─────────────────────────────────╮
-│ 🛒 Weekly Groceries             │
-│                                 │
-│ 1️⃣ ✅ ~~milk~~                  │
-│ 2️⃣ ⬜ bread                     │
-│ 3️⃣ ⬜ eggs                      │
-│ 4️⃣ ⬜ apples                    │
-│                                 │
-│ Progress: 1/4 items checked     │
-│                                 │
-│ Click number emojis to check/   │
-│ uncheck items • 🧹 Clear comp-  │
-│ leted • ➕ Add item • ✏️ Edit   │
-╰─────────────────────────────────╯
-Reactions: 1️⃣ 2️⃣ 3️⃣ 4️⃣ 🧹 ➕ ✏️
+```
+✅ Created shopping list "Weekly Groceries" with 4 items! This list is now active in this channel.
 ```
 
-### 3. User Clicks 2️⃣ and 3️⃣ (Check bread and eggs)
-```
-Bot: "✅ user checked: bread"
-Bot: "✅ user checked: eggs"
+Public message:
 
-Updated List:
-╭─────────────────────────────────╮
-│ 🛒 Weekly Groceries             │
-│                                 │
-│ 1️⃣ ✅ ~~milk~~                  │
-│ 2️⃣ ✅ ~~bread~~                 │
-│ 3️⃣ ✅ ~~eggs~~                  │
-│ 4️⃣ ⬜ apples                    │
-│                                 │
-│ Progress: 3/4 items checked     │
-│                                 │
-│ Click number emojis to check/   │
-│ uncheck items • 🧹 Clear comp-  │
-│ leted • ➕ Add item • ✏️ Edit   │
-╰─────────────────────────────────╯
-Reactions: 1️⃣ 2️⃣ 3️⃣ 4️⃣ 🧹 ➕ ✏️
+```
+┌─ Embed ──────────────────────────────────────┐
+│ 🛒 Weekly Groceries                          │
+│                                              │
+│ *Use the buttons below to check off items    │
+│ as you shop!*                                │
+│                                              │
+│ 🛒 0/4 items - Let's shop!      Today at 18:42│
+└──────────────────────────────────────────────┘
+[⬜ 1. milk] [⬜ 2. bread] [⬜ 3. eggs] [⬜ 4. apples]
+[➕ Add] [✏️ Edit] [🔄 Refresh]
 ```
 
-### 4. User Clicks 🧹 (Clear completed items)
-```
-Bot: "🧹 user cleared 3 completed items!"
+Embed colour: blurple. `Clear Done` is absent because nothing is checked.
 
-Updated List:
-╭─────────────────────────────────╮
-│ 🛒 Weekly Groceries             │
-│                                 │
-│ 1️⃣ ⬜ apples                    │
-│                                 │
-│ Click number emojis to check/   │
-│ uncheck items • ➕ Add item •   │
-│ ✏️ Edit                         │
-╰─────────────────────────────────╯
-Reactions: 1️⃣ ➕ ✏️
+## 2. Check an item
+
+Click `⬜ 1. milk`. Ephemeral reply:
+
+```
+✅ Checked: **milk**
 ```
 
-### 5. Complete Shopping Experience
-```
-Final workflow:
-1. 1️⃣ → Check milk (becomes ~~strikethrough~~)
-2. 2️⃣ → Check bread (becomes ~~strikethrough~~)
-3. 3️⃣ → Check eggs (becomes ~~strikethrough~~)
-4. 🧹 → Clear all checked items at once!
-5. Only unchecked items remain
+The public message is edited in place:
 
-If list becomes empty:
-╭─────────────────────────────────╮
-│ 🛒 Weekly Groceries             │
-│                                 │
-│ Your shopping list is empty.    │
-│ Add some items with /shop add!  │
-│                                 │
-│ Use /shop add <item> to add     │
-│ items to your list              │
-╰─────────────────────────────────╯
+```
+┌─ Embed ──────────────────────────────────────┐
+│ 🛒 Weekly Groceries                          │
+│                                              │
+│ *Use the buttons below to check off items    │
+│ as you shop!*                                │
+│                                              │
+│ 📝 1/4 items checked - Keep going!           │
+└──────────────────────────────────────────────┘
+[✅ 1. milk] [⬜ 2. bread] [⬜ 3. eggs] [⬜ 4. apples]
+[➕ Add] [🧹 Clear Done] [✏️ Edit] [🔄 Refresh]
 ```
 
-## Key Features Demonstrated
+Embed colour: yellow. Button 1 is green. Clicking it again replies `⬜ Unchecked: **milk**` and restores the previous state.
 
-### ✨ Simple One-Click System
-- **Click number**: Check/uncheck item (becomes ~~strikethrough~~)
-- **Click 🧹**: Clear all checked items at once
-- No complex menus or multiple steps!
+## 3. Add items with the modal
 
-### 🎯 Intuitive Number System
-- Each item gets a number emoji (1️⃣, 2️⃣, 3️⃣, etc.)
-- Click the number to toggle that specific item
-- Maximum 10 items supported with number emojis
+Click `➕ Add`. The modal:
 
-### 📊 Clear Progress Tracking
-- ✅ Checked items shown with strikethrough
-- ⬜ Unchecked items shown normally
-- Progress counter: "3/4 items checked"
+```
+┌─ Add Items — Weekly Groceries ───────────────┐
+│ Items (use ; to separate)                    │
+│ ┌──────────────────────────────────────────┐ │
+│ │ butter;cheese                            │ │
+│ └──────────────────────────────────────────┘ │
+│                                    [Submit]  │
+└──────────────────────────────────────────────┘
+```
 
-### 🧹 Batch Operations
-- 🧹 appears when there are checked items
-- One click removes all checked items at once
-- Perfect for clearing completed shopping
+Ephemeral reply after submitting:
 
-### 👥 Multi-User Support
-- Actions show which user performed them
-- Multiple people can check items simultaneously
-- Perfect for family shopping or team coordination
+```
+➕ Added 2 items to the shopping list:
+• butter
+• cheese
+```
 
-### 🛠️ Additional Features
-- ➕ Quick add items via reaction
-- ✏️ Edit items in-place
-- Channel management with `/shop channel`
-- Help system with `/shop help`
+The list message is re-rendered with six item buttons and footer `📝 1/6 items checked - Keep going!`.
+
+## 4. Edit an item with the modal
+
+Click `✏️ Edit`. The modal:
+
+```
+┌─ Edit Item — Weekly Groceries ───────────────┐
+│ Item number (1-99)                           │
+│ ┌─────┐                                      │
+│ │ 2   │                                      │
+│ └─────┘                                      │
+│ New item text                                │
+│ ┌──────────────────────────────────────────┐ │
+│ │ wholemeal bread                          │ │
+│ └──────────────────────────────────────────┘ │
+│                                    [Submit]  │
+└──────────────────────────────────────────────┘
+```
+
+Ephemeral reply:
+
+```
+✏️ Updated "bread" → "wholemeal bread".
+```
+
+Button 2 now reads `⬜ 2. wholemeal bread`.
+
+## 5. Clear completed items
+
+Check `wholemeal bread` and `eggs`, then click `🧹 Clear Done`:
+
+```
+✅ Checked: **wholemeal bread**
+✅ Checked: **eggs**
+🧹 Cleared 3 completed items!
+```
+
+The three checked items are deleted. Remaining items are renumbered from 1:
+
+```
+┌─ Embed ──────────────────────────────────────┐
+│ 🛒 Weekly Groceries                          │
+│                                              │
+│ *Use the buttons below to check off items    │
+│ as you shop!*                                │
+│                                              │
+│ 🛒 0/3 items - Let's shop!                   │
+└──────────────────────────────────────────────┘
+[⬜ 1. apples] [⬜ 2. butter] [⬜ 3. cheese]
+[➕ Add] [✏️ Edit] [🔄 Refresh]
+```
+
+Embed colour: blurple. `Clear Done` disappears again.
+
+## 6. Finish the list
+
+Check every item:
+
+```
+┌─ Embed ──────────────────────────────────────┐
+│ 🛒 Weekly Groceries                          │
+│                                              │
+│ *Use the buttons below to check off items    │
+│ as you shop!*                                │
+│                                              │
+│ ✨ All done! (3/3 items)                     │
+└──────────────────────────────────────────────┘
+[✅ 1. apples] [✅ 2. butter] [✅ 3. cheese]
+[➕ Add] [🧹 Clear Done] [✏️ Edit] [🔄 Refresh]
+```
+
+Embed colour: green. Clicking `🧹 Clear Done` replies `🧹 Cleared 3 completed items!`.
+
+## 7. Empty list
+
+After clearing everything, or after `/shop clear`:
+
+```
+┌─ Embed ──────────────────────────────────────┐
+│ 🛒 Weekly Groceries                          │
+│                                              │
+│ *Your shopping list is empty. Click the      │
+│ "Add Items" button below to get started!*    │
+│                                              │
+│ ⬇️ Use the buttons below                     │
+└──────────────────────────────────────────────┘
+[➕ Add Items]
+```
+
+Embed colour: grey. An empty list shows only the Add button.
+
+## 8. More than 20 items
+
+Only the first 20 items get buttons; the rest appear in the embed. The description is capped at Discord's 4096-character limit, so very long lists end with an "and N more items" line.
+
+```
+┌─ Embed ──────────────────────────────────────┐
+│ 🛒 Costco Run                                │
+│                                              │
+│ **First 20 items have buttons below.**       │
+│                                              │
+│ **Remaining items:**                         │
+│ 21. ⬜ batteries                             │
+│ 22. ✅ ~~paper towels~~                      │
+│                                              │
+│ 📝 1/22 items checked - Keep going!          │
+└──────────────────────────────────────────────┘
+[⬜ 1. water] [⬜ 2. rice] [⬜ 3. pasta] [⬜ 4. oil] [⬜ 5. salt]
+... four item rows in total ...
+[➕ Add] [🧹 Clear Done] [✏️ Edit] [🔄 Refresh]
+```
+
+Items 21+ have no buttons and cannot be toggled. Use `✏️ Edit` with the item number to change one; `/shop add` appends new items to the end.
+
+## 9. Multiple lists
+
+`/shop lists` (ephemeral):
+
+```
+📋 Available Shopping Lists (2)
+
+🔹 Weekly Groceries (active here) - 0/3 complete
+▫️ Hardware - 📝 Empty
+
+💡 Use /shop list "ListName" to display a list in this channel.
+```
+
+`/shop list title: Hardware` (ephemeral):
+
+```
+✅ "Hardware" is now active in this channel!
+```
+
+Creating or displaying a list makes it the active list for the current channel; `/shop add` and `/shop clear` operate on that list.
+
+## Notes
+
+- There are no emoji reactions or two-step checks. Checking is a single button press that toggles the item.
+- Every list interaction gets an ephemeral acknowledgement; the channel only sees the edited list message.
+- The public list message is shared: any member who can see the channel can press its buttons.
+- Re-rendering is in place, so message history does not fill with updated copies of the list.

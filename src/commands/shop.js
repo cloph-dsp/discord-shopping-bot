@@ -4,12 +4,12 @@ const { createShoppingListEmbed, createInstructionEmbed } = require('../utils/em
 const { createShoppingListButtons } = require('../utils/buttons');
 const messageCache = require('../utils/messageCache');
 
-// Cache autocomplete results to speed up responses
-let autocompleteCache = {
-  titles: [],
-  lastUpdate: 0,
-  ttl: 5000 // 5 second cache
-};
+const guildIdOf = interaction => interaction.guild?.id || 'dm';
+
+// Cache autocomplete results per guild to speed up responses without leaking
+// list titles between servers.
+const autocompleteCache = new Map();
+const AUTOCOMPLETE_TTL = 5000;
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -92,16 +92,18 @@ module.exports = {
     try {
       const focused = interaction.options.getFocused();
       
-      // Use cached titles if available and fresh
+      // Use cached titles for this guild if available and fresh
       const now = Date.now();
-      if (now - autocompleteCache.lastUpdate > autocompleteCache.ttl) {
-        autocompleteCache.titles = storage.getAllListTitles();
-        autocompleteCache.lastUpdate = now;
+      const guildId = guildIdOf(interaction);
+      let entry = autocompleteCache.get(guildId);
+      if (!entry || now - entry.lastUpdate > AUTOCOMPLETE_TTL) {
+        entry = { titles: storage.getAllListTitles(guildId), lastUpdate: now };
+        autocompleteCache.set(guildId, entry);
       }
-      
+
       // Quick filter and limit to 25 results
       // Use includes() instead of startsWith() for better UX
-      const filtered = autocompleteCache.titles
+      const filtered = entry.titles
         .filter(title => title.toLowerCase().includes(focused.toLowerCase()))
         .slice(0, 25);
       
@@ -111,12 +113,13 @@ module.exports = {
       );
       
       // Add a timeout to prevent hanging on slow connections
+      let timer;
       await Promise.race([
         responsePromise,
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Autocomplete timeout')), 2500)
-        )
-      ]);
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Autocomplete timeout')), 2500);
+        })
+      ]).finally(() => clearTimeout(timer));
     } catch (error) {
       // Silently fail - autocomplete errors shouldn't crash the bot
       console.error('Autocomplete error:', error.message || error);
@@ -138,7 +141,7 @@ async function handleCreate(interaction) {
   const channelId = interaction.channel.id;
 
   // Check if list with this title already exists
-  const existingList = storage.getListByTitle(title);
+  const existingList = storage.getListByTitle(title, guildIdOf(interaction));
   if (existingList) {
     return interaction.editReply({ 
       content: `❌ A list named "${title}" already exists. Choose a different name or use \`/shop list "${title}"\` to display it.`
@@ -152,7 +155,7 @@ async function handleCreate(interaction) {
   }
 
   // Create the shopping list
-  const list = storage.createList(title, items);
+  const list = storage.createList(title, items, guildIdOf(interaction));
   
   // Set as active list for this channel
   storage.setActiveList(channelId, list.id);
@@ -189,7 +192,7 @@ async function handleAdd(interaction) {
   // Get active list in this channel
   const active = storage.getActiveList(channelId);
   if (!active) {
-    const titles = storage.getAllListTitles();
+    const titles = storage.getAllListTitles(guildIdOf(interaction));
     if (titles.length === 0) {
       return interaction.editReply({ 
         content: '❌ No shopping lists exist. Create one first with `/shop create`'
@@ -263,9 +266,9 @@ async function handleList(interaction) {
   let listId, list;
   
   if (titleOption) {
-    const found = storage.getListByTitle(titleOption);
+    const found = storage.getListByTitle(titleOption, guildIdOf(interaction));
     if (!found) {
-      const titles = storage.getAllListTitles();
+      const titles = storage.getAllListTitles(guildIdOf(interaction));
       return interaction.editReply({ content: `❌ No list titled "${titleOption}". Available titles: ${titles.join(', ')}` });
     }
     listId = found.listId;
@@ -279,7 +282,7 @@ async function handleList(interaction) {
   }
 
   if (!list) {
-    const titles = storage.getAllListTitles();
+    const titles = storage.getAllListTitles(guildIdOf(interaction));
     if (titles.length === 0) {
       return interaction.editReply({ content: '❌ No lists exist. Create one with `/shop create`' });
     }
@@ -384,7 +387,7 @@ async function handleLists(interaction) {
     return;
   }
   
-  const allLists = storage.getAllLists();
+  const allLists = storage.getAllLists(guildIdOf(interaction));
   
   if (allLists.length === 0) {
     return interaction.editReply({ 

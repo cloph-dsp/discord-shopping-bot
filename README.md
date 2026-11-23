@@ -1,98 +1,94 @@
 # Discord Shopping List Bot
 
-A Discord bot that creates interactive shopping lists using emoji reactions for a two-step checking system.
+A Discord bot for shared shopping lists. Each list is a public message with buttons: tap an item button to check it off, add or edit items through modals, and clear completed items. Data is stored in SQLite.
 
 ## Features
 
-- 🛒 **Interactive Shopping Lists**: Create and manage multiple shopping lists
-- ✅ **Two-Step Checking**: First click marks item as "in cart", second click removes from list
-- 📝 **Slash Commands**: Modern Discord slash command interface
-- 📋 **Multi-List Support**: Create multiple lists and switch between them in any channel
-- 🏪 **Smart Channel Tracking**: Each channel remembers its last active list
-- 👥 **Multi-User**: Multiple users can interact with the same shopping list
-
-## Emoji System
-
-- 1️⃣2️⃣3️⃣ **Number Emojis**: Click to check/uncheck specific items (becomes ~~strikethrough~~)
-- 🧹 **Clear Completed**: Remove all checked items at once (appears when items are checked)
-- ➕ **Add Item**: Quickly add new items via reaction
-- ✏️ **Edit**: Edit an existing item
+- `/shop` slash commands with autocomplete for list titles
+- One toggle button per item (the first 20 items), checked state updated in place
+- Modals for adding multiple items and editing an item
+- Multiple named lists; each channel tracks its own active list
+- Embed colour and footer reflect progress
+- Persistent SQLite storage
+- No privileged gateway intents required
 
 ## Commands
 
-- `/shop create <title> [items]` - Create a new shopping list
-- `/shop add <item> [quantity]` - Add item(s) to the active list (separate multiple with `;`)
-- `/shop list [title]` - Display a shopping list (with autocomplete for list names)
-- `/shop lists` - Show all available shopping lists with their status
-- `/shop clear` - Clear items from the active shopping list
-- `/shop help` - Show help and instructions
+| Command | Description |
+|---|---|
+| `/shop create <title> [items]` | Create a list. `items` is semicolon-separated (e.g. `milk;bread;eggs`). The list becomes active in the current channel and is posted as a public message. |
+| `/shop add <item> [quantity]` | Add one or more items to the channel's active list. Separate multiple items with `;`. A `quantity` above 1 is stored as `item (N)`. |
+| `/shop list [title]` | Display a list, with autocomplete. The list becomes active in the current channel. Without `title`, displays the channel's active list. |
+| `/shop clear` | Remove all items from the active list, checked and unchecked. |
+| `/shop lists` | Show all lists with their completion counts and mark the one active in this channel. |
+| `/shop help` | Show the in-Discord usage embed. |
+| `/test` | Developer utility. Posts a test embed and adds emoji reactions; only this command needs Add Reactions. |
 
-## Installation
+`/shop` command replies are ephemeral (only the invoker sees them); `/test` posts publicly. The list itself is a normal public message, and any member who can see the channel can press its buttons.
 
-1. Clone this repository
-2. Run `npm install`
-3. Create a `.env` file with your Discord bot token:
-   ```
-   DISCORD_TOKEN=your_bot_token_here
-   DISCORD_CLIENT_ID=your_client_id_here
-   ```
-4. Run `npm run deploy` to register slash commands
-5. Run `npm start` to start the bot
+## Buttons
 
-## Discord Bot Setup (How to Add the Bot to Your Server)
+| Button | Behaviour |
+|---|---|
+| `⬜ N. item` | Unchecked item. Click to check it (button turns green, `✅ N. item`). |
+| `✅ N. item` | Checked item. Click again to uncheck it. |
+| `➕ Add` | Opens a modal with a paragraph field; separate items with `;`. |
+| `✏️ Edit` | Opens a modal asking for an item number and the new text. |
+| `🧹 Clear Done` | Deletes all checked items. Only shown while at least one item is checked. |
+| `🔄 Refresh` | Re-renders the list message from the database. |
 
-1. **Create a Discord Application & Bot**
-   - Go to the [Discord Developer Portal](https://discord.com/developers/applications)
-   - Click **New Application** and give it a name
-   - Go to the **Bot** tab and click **Add Bot**
-   - Under **Privileged Gateway Intents**, enable **Message Content Intent**
-   - Copy the **Bot Token** and add it to your `.env` file as `DISCORD_TOKEN`
-   - Copy the **Client ID** and add it to your `.env` file as `DISCORD_CLIENT_ID`
+Item buttons are limited to 20 (four rows of five), leaving the fifth row for the controls. Items beyond 20 are shown in the embed description, numbered 21 onward, with `⬜`/`✅` and strikethrough when checked; they have no buttons.
 
-2. **Invite the Bot to Your Server**
-   - Go to the **OAuth2 > URL Generator** tab
-   - Under **Scopes**, select `bot` and `applications.commands`
-   - Under **Bot Permissions**, select:
-     - `Send Messages`
-     - `Read Message History`
-     - `Add Reactions`
-     - `Manage Messages` (for removing reactions)
-   - Copy the generated URL and open it in your browser
-   - Select your server and authorize the bot
+Embed colour indicates progress: grey for an empty list, blurple when nothing is checked, yellow when some items are checked, green when all are checked. The footer shows completion progress (`N/M items` plus a state message), except on an empty list, where it points at the buttons.
 
-3. **Run the Bot**
-   - Make sure your `.env` file is set up with your token and client ID
-   - Run `npm run deploy` to register slash commands
-   - Run `npm start` to start the bot
+## Requirements
 
-4. **First Steps in Discord**
-   - Use `/shop channel #your-channel` to set the shopping list channel
-   - Use `/shop create` to create your first list!
+- Node.js 20 or newer
+- A Discord bot with the `bot` and `applications.commands` scopes
+- Permissions: Send Messages, Read Message History, Use Application Commands
+- Gateway intents: Guilds and GuildMessages only; Message Content is not used
 
-## Usage
+## Quick start
 
-1. Create a shopping list: `/shop create "Weekly Groceries" milk;bread;eggs`
-2. The list becomes active in the current channel
-3. Add items: `/shop add butter;cheese`
-4. Display any list in any channel: `/shop list "Weekly Groceries"`
-5. See all lists: `/shop lists`
-6. Users can click emojis to interact with items:
-   - 1️⃣2️⃣3️⃣ to check/uncheck specific items (becomes ~~strikethrough~~)
-   - 🧹 to clear all checked items at once
-   - ➕ to add new items quickly
-   - ✏️ to edit existing items
+```bash
+npm install
+cp .env.example .env    # set DISCORD_TOKEN and DISCORD_CLIENT_ID
+npm run deploy          # register slash commands
+npm start
+```
 
-**How it works:**
-- Each channel remembers the last list you displayed in it
-- `/shop add` and `/shop clear` work on the active list in the current channel
-- You can display any list in any channel - great for having a "Groceries" channel and "Electronics" channel
+See [SETUP.md](SETUP.md) for Discord application setup, environment variables and running as a service. See [EXAMPLE.md](EXAMPLE.md) for text mockups of the list message, buttons and modals.
 
-## How It Works
+## Storage
 
-The bot uses Discord's reaction system to create a simple, intuitive shopping experience:
+Data lives in `data/storage.db` (SQLite via `better-sqlite3`) and is created on first start. The `data/` directory is gitignored. List titles are unique within each guild. Each channel keeps one active list in `active_lists`; switching lists replaces that mapping instead of leaving two candidates. Pre-guild databases are upgraded on first start, and their lists are assigned to the guild automatically when the bot is in exactly one guild. `npm run migrate` imports legacy `data/lists.json` / `data/settings.json` data into SQLite.
 
-1. **Fresh Item**: `1️⃣ ⬜ Milk (2 liters)`
-2. **Checked**: `1️⃣ ✅ ~~Milk (2 liters)~~` (strikethrough)
-3. **Clear All**: Click 🧹 to remove all checked items at once
+## Tests
 
-This creates a natural workflow: check items as you shop, then clear all completed items when done!
+`npm test` runs the storage, UI-limit and migration tests with a throwaway database. `node demo.js` also uses a throwaway database and never writes to `data/storage.db`.
+
+## Project layout
+
+```
+src/
+├── index.js                     # client setup, command/event loading, shutdown handling
+├── deploy-commands.js           # registers application commands
+├── commands/
+│   ├── shop.js                  # /shop create|add|list|clear|lists|help
+│   └── test.js                  # developer /test command
+├── events/
+│   ├── ready.js                 # ready log, REST warm-up and keep-alive
+│   └── interactionCreate.js     # command, button, modal and autocomplete handling
+└── utils/
+    ├── storage.js               # SQLite persistence
+    ├── embeds.js                # list and help embeds
+    ├── buttons.js               # button row builders
+    ├── messageCache.js          # short-lived message cache
+    ├── modalTitles.js           # modal title truncation
+    ├── migrate-json-to-sqlite.js
+    └── test-reactions.js        # helpers for /test
+```
+
+## License
+
+MIT

@@ -10,17 +10,19 @@ const storage = require('../utils/storage');
 const { createShoppingListEmbed } = require('../utils/embeds');
 const { createShoppingListButtons, disableAllButtons } = require('../utils/buttons');
 const messageCache = require('../utils/messageCache');
+const { ADD_PREFIX, EDIT_PREFIX, fitModalTitle } = require('../utils/modalTitles');
 
 // ponytail: removed queueMessageOperation (caused deadlocks).
 // DB ops are sync, Discord message.edit is idempotent — no queue needed.
 
-const truncate = (str, len) => str.length > len ? str.substring(0, len - 3) + '...' : str;
-
 function withTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms))
-  ]);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms);
+  });
+  // Clear the timer so a slow-but-successful call does not leave a pending
+  // rejection that can surface after the operation has already finished.
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 module.exports = {
@@ -125,7 +127,7 @@ module.exports = {
           // Build modal
           modal = new ModalBuilder()
             .setCustomId(`addItemModal:${listId}`)
-            .setTitle(`Add Items — ${truncate(listTitle, 45)}`);
+            .setTitle(fitModalTitle(ADD_PREFIX, listTitle));
 
           const itemsInput = new TextInputBuilder()
             .setCustomId('add_item_input')
@@ -157,7 +159,7 @@ module.exports = {
           // Build modal
           modal = new ModalBuilder()
             .setCustomId(`editItemModal:${listId}`)
-            .setTitle(`Edit Item — ${truncate(listTitle, 45)}`);
+            .setTitle(fitModalTitle(EDIT_PREFIX, listTitle));
 
           const indexInput = new TextInputBuilder()
             .setCustomId('edit_item_index')
@@ -265,16 +267,21 @@ async function handleToggleItem(interaction, listId, itemId) {
   console.log(`[TOGGLE:H] resolveChannel done`);
 
   const updatedItem = storage.toggleItemChecked(listId, itemId);
-  console.log(`[TOGGLE:H] toggle done, refreshListMessage start`);
-  await refreshListMessage(interaction.client, listId, channel, false);
-  console.log(`[TOGGLE:H] refreshListMessage done`);
+  let refreshFailed = false;
+  try {
+    await withTimeout(refreshListMessage(interaction.client, listId, channel, false), 8000, 'refresh toggle');
+  } catch (refreshError) {
+    refreshFailed = true;
+    console.error('Refresh after toggle failed:', refreshError.message);
+  }
 
   const isCheckedNow = updatedItem ? updatedItem.checked : !item.checked;
   const emoji = isCheckedNow ? '✅' : '⬜';
   const status = isCheckedNow ? 'checked' : 'unchecked';
 
   await interaction.editReply({
-    content: `${emoji} ${status.charAt(0).toUpperCase() + status.slice(1)}: **${updatedItem?.text || item.text}**`
+    content: `${emoji} ${status.charAt(0).toUpperCase() + status.slice(1)}: **${updatedItem?.text || item.text}**` +
+      (refreshFailed ? '\n⚠️ List display not refreshed. Press 🔄 Refresh.' : '')
   });
 }
 
@@ -335,13 +342,19 @@ async function handleAddItemModalSubmit(interaction) {
     return;
   }
 
+  let added = false;
   try {
     const channel = await withTimeout(
       resolveChannel(interaction.client, list.channelId, interaction.channel),
       5000, 'resolve channel add'
     );
     items.forEach(item => storage.addItem(listId, item));
-    await withTimeout(refreshListMessage(interaction.client, listId, channel, false), 10000, 'refresh add');
+    added = true;
+    try {
+      await withTimeout(refreshListMessage(interaction.client, listId, channel, false), 8000, 'refresh add');
+    } catch (refreshError) {
+      console.error('Refresh after add failed:', refreshError.message);
+    }
 
     const resultText = items.length === 1
       ? `➕ Added "${items[0]}" to the shopping list.`
@@ -350,7 +363,11 @@ async function handleAddItemModalSubmit(interaction) {
     await interaction.editReply({ content: resultText });
   } catch (error) {
     console.error('Error adding items:', error);
-    await interaction.editReply({ content: '❌ Failed to add items.' });
+    await interaction.editReply({
+      content: added
+        ? '⚠️ Items were added, but the list display could not be refreshed. Press 🔄 Refresh.'
+        : '❌ Failed to add items.'
+    });
   }
 }
 
@@ -380,6 +397,7 @@ async function handleEditItemModalSubmit(interaction) {
     return;
   }
 
+  let edited = false;
   try {
     const targetItem = list.items[index];
     const channel = await withTimeout(
@@ -387,12 +405,21 @@ async function handleEditItemModalSubmit(interaction) {
       5000, 'resolve channel edit'
     );
     storage.editItem(listId, targetItem.id, newText);
-    await withTimeout(refreshListMessage(interaction.client, listId, channel, false), 10000, 'refresh edit');
+    edited = true;
+    try {
+      await withTimeout(refreshListMessage(interaction.client, listId, channel, false), 8000, 'refresh edit');
+    } catch (refreshError) {
+      console.error('Refresh after edit failed:', refreshError.message);
+    }
 
     await interaction.editReply({ content: `✏️ Updated "${targetItem.text}" → "${newText}".` });
   } catch (error) {
     console.error('Edit modal error:', error);
-    await interaction.editReply({ content: '❌ Failed to edit the item. Please try again.' });
+    await interaction.editReply({
+      content: edited
+        ? '⚠️ Item was updated, but the list display could not be refreshed. Press 🔄 Refresh.'
+        : '❌ Failed to edit the item. Please try again.'
+    });
   }
 }
 

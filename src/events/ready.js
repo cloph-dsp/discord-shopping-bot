@@ -1,4 +1,5 @@
 const { Events } = require('discord.js');
+const storage = require('../utils/storage');
 
 module.exports = {
   name: Events.ClientReady,
@@ -6,6 +7,15 @@ module.exports = {
   async execute(client) {
     console.log(`Ready! Logged in as ${client.user.tag}`);
     console.log(`Bot is in ${client.guilds.cache.size} guilds`);
+
+    // Lists created before guild scoping are global. With a single guild we can
+    // assign them safely; with several, leave them global rather than guessing.
+    if (client.guilds.cache.size === 1) {
+      const moved = storage.claimLegacyLists(client.guilds.cache.first().id);
+      if (moved > 0) console.log(`[READY] Assigned ${moved} legacy list(s) to this guild.`);
+    } else if (client.guilds.cache.size > 1) {
+      console.warn('[READY] Multiple guilds: legacy lists stay global until assigned manually.');
+    }
     
     // Warm up the REST client by making a dummy request
     // This ensures the TLS connection is established early

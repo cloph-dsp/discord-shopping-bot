@@ -1,5 +1,8 @@
 const { EmbedBuilder } = require('discord.js');
 
+const MAX_DESCRIPTION = 4096;
+const MAX_TITLE = 256;
+
 function createShoppingListEmbed(list) {
   const checkedItems = list.items.filter(item => item.checked);
   const totalItems = list.items.length;
@@ -18,7 +21,7 @@ function createShoppingListEmbed(list) {
   }
   
   const embed = new EmbedBuilder()
-    .setTitle(`🛒 ${list.title}`)
+    .setTitle(`🛒 ${String(list.title).slice(0, MAX_TITLE - 2)}`)
     .setColor(embedColor)
     .setTimestamp();
 
@@ -29,20 +32,34 @@ function createShoppingListEmbed(list) {
   }
 
   // Compact summary instead of full list (buttons show everything)
-  let description = '';
-  
+  let description;
+
   if (totalItems <= 20) {
     // All items have buttons - no need to show in embed
-    description = `*Use the buttons below to check off items as you shop!*`;
+    description = '*Use the buttons below to check off items as you shop!*';
   } else {
-    // Show items beyond the 20 that have buttons
-    description = `**First 20 items have buttons below.**\n\n**Remaining items:**\n`;
+    // Show items beyond the 20 that have buttons, within Discord's 4096-char cap.
+    const header = '**First 20 items have buttons below.**\n\n**Remaining items:**\n';
+    const budget = MAX_DESCRIPTION - header.length - 100;
+    let body = '';
+    let hidden = 0;
+
     for (let i = 20; i < list.items.length; i++) {
       const item = list.items[i];
       const status = item.checked ? '✅' : '⬜';
       const itemText = item.checked ? `~~${item.text}~~` : item.text;
-      description += `${i + 1}. ${status} ${itemText}\n`;
+      const line = `${i + 1}. ${status} ${String(itemText).slice(0, 150)}\n`;
+      if (body.length + line.length > budget) {
+        hidden++;
+        continue;
+      }
+      body += line;
     }
+
+    if (hidden > 0) {
+      body += `\n_… and ${hidden} more item${hidden === 1 ? '' : 's'}._`;
+    }
+    description = header + body;
   }
 
   embed.setDescription(description.trim());

@@ -1,153 +1,163 @@
-# Discord Shopping List Bot Setup Guide
+# Setup Guide
 
 ## Prerequisites
-- Node.js 20.x or higher (required by `better-sqlite3` 12.x)
-- A Discord application and bot token
-- Basic knowledge of Discord bot setup
 
-## Quick Start
+- Node.js 20 or newer (`better-sqlite3` 12.x requires it)
+- A Discord account with access to the [Developer Portal](https://discord.com/developers/applications)
 
-### 1. Discord Application Setup
-1. Go to https://discord.com/developers/applications
-2. Create a new application
-3. Go to "Bot" section and create a bot
-4. Copy the bot token
-5. Copy the application ID from "General Information"
+## 1. Create the Discord application
 
-### 2. Bot Permissions
-Your bot needs these permissions:
-- Send Messages
-- Use Slash Commands
-- Add Reactions
-- Read Message History
-- Manage Messages (to remove reactions)
+1. Open the Developer Portal and click **New Application**.
+2. Copy the **Application ID** from *General Information* — this is `DISCORD_CLIENT_ID`.
+3. Open the **Bot** tab, create/reset the bot token and copy it — this is `DISCORD_TOKEN`.
+4. Leave all **Privileged Gateway Intents** disabled. The bot connects with `Guilds` and `GuildMessages` only; it does not read message content.
 
-### 3. Installation
+## 2. Invite the bot
+
+Use the OAuth2 URL Generator with:
+
+- Scopes: `bot`, `applications.commands`
+- Bot permissions: **Send Messages**, **Read Message History**, **Use Application Commands**
+
+URL template:
+
+```
+https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=67584&scope=bot%20applications.commands
+```
+
+`67584` is Send Messages + Read Message History; command use is granted by the `applications.commands` scope. Add Reactions and Manage Messages are not needed for normal operation (only the developer `/test` command adds reactions).
+
+## 3. Install
+
 ```bash
-# Clone or download the bot files
 cd discord-shopping-bot
-
-# Install dependencies
 npm install
-
-# Create environment file
 cp .env.example .env
 ```
 
-### 4. Configuration
-Edit `.env` file with your bot credentials:
-```
-DISCORD_TOKEN=your_bot_token_here
-DISCORD_CLIENT_ID=your_client_id_here
-```
+## 4. Configure `.env`
 
-### 5. Deploy Commands
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `DISCORD_TOKEN` | yes | — | Bot token from the Developer Portal |
+| `DISCORD_CLIENT_ID` | yes | — | Application ID |
+| `REST_REQUEST_TIMEOUT_MS` | no | `15000` | REST request timeout. Values below `3000` fall back to the default. |
+| `REST_KEEPALIVE_INTERVAL_MS` | no | `45000` | Interval for the REST keep-alive ping. Values below `15000` fall back to the default. |
+
+## 5. Register slash commands
+
 ```bash
-# Register slash commands with Discord
 npm run deploy
 ```
 
-### 6. Start the Bot
+This registers global application commands. Discord can take a few minutes to show them in clients.
+
+## 6. Run
+
 ```bash
-# Start the bot
-npm start
-
-# For development with auto-restart
-npm run dev
+npm start        # production
+npm run dev      # nodemon auto-restart
 ```
 
-### 7. Invite Bot to Your Server
-Create an invite link with these scopes:
-- `bot`
-- `applications.commands`
+Production on this host runs under the systemd unit `discord-shopping`:
 
-URL template:
+```bash
+sudo systemctl restart discord-shopping
+journalctl -u discord-shopping -f
 ```
-https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=2147537984&scope=bot%20applications.commands
+
+## 7. Migrate legacy JSON data (optional)
+
+Older versions stored data in `data/lists.json` and `data/settings.json`. To import it into `data/storage.db`:
+
+```bash
+npm run migrate
 ```
+
+The script imports both files if present and renames them to `*.migrated`. Existing list and item rows are skipped; settings rows are replaced.
 
 ## Usage
 
-### Basic Commands
-- `/shop help` - Show help and instructions
-- `/shop create "My List" milk;bread;eggs` - Create a shopping list
-- `/shop add "Orange juice" 2` - Add item with quantity
-- `/shop list` - Show current shopping list
-- `/shop clear` - Clear the shopping list
-- `/shop channel #shopping` - Set shopping channel
+### Commands
 
-### Button Interactions
-Lists are interactive — each item has a check button. Other action buttons sit under the list:
+| Command | Description |
+|---|---|
+| `/shop create <title> [items]` | Create a list. `items` is semicolon-separated. The list is posted publicly in the current channel and becomes its active list. Titles must be unique within a guild. |
+| `/shop add <item> [quantity]` | Add items to the channel's active list. Multiple items use `;`. A quantity above 1 applies to every item in the command and is stored as `item (N)`. |
+| `/shop list [title]` | Display a list (autocomplete). Makes it the active list in the current channel. Without a title, uses the channel's active list. |
+| `/shop clear` | Remove all items (checked and unchecked) from the active list. |
+| `/shop lists` | Show all lists with completion counts; marks the one active in this channel. |
+| `/shop help` | Show the usage embed. |
+| `/test` | Developer utility; posts a test embed and adds emoji reactions. Needs Add Reactions to succeed. |
 
-1. **Item buttons**: Click to toggle checked / unchecked (embeds show ⬜ unchecked, ✅ checked)
-2. **➕ Add Items**: Opens a modal to add new items (separate multiple with `;`)
-3. **✏️ Edit Item**: Opens a modal to edit an item by its number
-4. **🧹 Clear Done**: Removes all checked items at once
-5. **🔄 Refresh**: Re-renders the list message
+`/shop` command replies are ephemeral. The list message itself is public. `/test` posts its test embed publicly.
 
-### Workflow
-1. Create a shopping list: `/shop create "Weekly Groceries" milk;bread;eggs`
-2. As you shop, click item buttons to mark items done (they flip to ✅)
-3. When you're finished, click 🧹 to clear all checked items
-4. Use ➕ to add items you forgot; ✏️ to fix typos in item names
+### Buttons and modals
 
-## Features
+- Click an item button to toggle it. The button flips between `⬜` (grey) and `✅` (green), and the embed is edited in place.
+- **➕ Add** opens a modal; enter items separated by `;`.
+- **✏️ Edit** opens a modal asking for the item number (1–99) and the new text.
+- **🧹 Clear Done** deletes checked items and only appears while something is checked.
+- **🔄 Refresh** re-renders the list from the database.
 
-### Two-Step Shopping Process
-- **Step 1**: Add items to cart (🛒) - items become ~~strikethrough~~
-- **Step 2**: Confirm purchase (✅) - items are removed from the list
-- This prevents accidental removal and lets you track what's in your cart
+The first 20 items get buttons. Items 21 and beyond are listed in the embed as text and cannot be toggled by button.
 
-### Multi-User Support
-- Multiple people can interact with the same shopping list
-- Actions are logged with usernames
-- Perfect for family or team shopping
+### Active list behaviour
 
-### Channel Management
-- Set dedicated shopping channels
-- Prevents spam in other channels
-- Organize different lists in different channels
+- Creating a list, or displaying it with `/shop list`, binds it to the current channel and makes it active there.
+- `/shop add` and `/shop clear` act on the active list of the current channel. If the channel has no active list, the bot asks you to run `/shop list` there first.
 
 ## Troubleshooting
 
-### Bot Not Responding
-- Check bot is online and has proper permissions
-- Verify token in `.env` file
-- Check console for error messages
+### Slash commands are not visible
 
-### Slash Commands Not Showing
-- Run `npm run deploy` to register commands
-- Wait a few minutes for Discord to update
-- Check bot has `applications.commands` scope
+- Run `npm run deploy` and wait a few minutes; global command propagation is not instant.
+- Confirm the bot was invited with the `applications.commands` scope.
+- Restart the Discord client.
 
-### Reactions Not Working
-- Ensure bot has "Add Reactions" and "Manage Messages" permissions
-- Check the bot can see the channel where the shopping list is posted
+### Bot does not respond
 
-## Development
+- Check the process is running and the token is correct: `journalctl -u discord-shopping -n 100`.
+- Confirm the bot can view the channel and has Send Messages and Read Message History.
 
-### File Structure
+### "No active list in this channel"
+
+Run `/shop list "List name"` in that channel to bind and display the list there.
+
+### Buttons report the list no longer exists
+
+The list message or its database row was deleted. Re-post it with `/shop list "List name"`.
+
+### Button presses seem to do nothing
+
+Only the first 20 items have buttons. Check the embed for items shown as text, and use `/shop add` or the Add modal to append items; numbering is positional.
+
+### `/test` fails
+
+That developer utility adds emoji reactions to its own message and therefore needs Add Reactions, which the normal list workflows do not use.
+
+## Project layout
+
 ```
 src/
+├── index.js                     # client setup, command/event loading, shutdown handling
+├── deploy-commands.js           # registers application commands
 ├── commands/
-│   ├── shop.js          # Main shopping commands (create/add/list/clear/lists/help)
-│   └── test.js          # Developer reaction-test utility
+│   ├── shop.js                  # /shop create|add|list|clear|lists|help
+│   └── test.js                  # developer /test command
 ├── events/
-│   ├── ready.js         # Bot ready event (REST warmup + keep-alive)
-│   └── interactionCreate.js  # Button + modal handler
+│   ├── ready.js                 # ready log, REST warm-up and keep-alive
+│   └── interactionCreate.js     # command, button, modal and autocomplete handling
 └── utils/
-    ├── storage.js       # SQLite persistence (better-sqlite3)
-    ├── embeds.js        # Discord embed formatting
-    ├── buttons.js       # Button row builders
-    ├── messageCache.js  # Short-lived message cache
-    └── test-reactions.js # Reaction helpers for test command
+    ├── storage.js               # SQLite persistence (data/storage.db)
+    ├── embeds.js                # list and help embeds
+    ├── buttons.js               # button row builders
+    ├── messageCache.js          # short-lived message cache
+    ├── modalTitles.js           # modal title truncation
+    ├── migrate-json-to-sqlite.js
+    └── test-reactions.js        # helpers for /test
 ```
 
-### Adding Features
-- Storage is persistent via SQLite at `data/storage.db`
-- Embeds can be customized in `src/utils/embeds.js`
-- Commands can be extended in `src/commands/shop.js`
-- Button handlers live in `src/events/interactionCreate.js`
-
 ## License
-MIT License - Feel free to modify and distribute!
+
+MIT

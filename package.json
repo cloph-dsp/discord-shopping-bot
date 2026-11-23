@@ -1,21 +1,22 @@
 {
   "name": "discord-shopping-bot",
   "version": "1.0.0",
-  "description": "A Discord shopping list bot with emoji interactions for checking off items",
+  "description": "A Discord shopping list bot with interactive buttons and modals",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "deploy": "node src/deploy-commands.js",
-    "migrate": "node src/utils/migrate-json-to-sqlite.js"
+    "migrate": "node src/utils/migrate-json-to-sqlite.js",
+    "test": "node --test tests/*.test.js"
   },
   "keywords": [
     "discord",
     "bot",
     "shopping",
     "list",
-    "emoji",
-    "reactions"
+    "buttons",
+    "modals"
   ],
   "author": "Discord Shopping Bot",
   "license": "MIT",
@@ -26,7 +27,7 @@
     "better-sqlite3": "^12.10.0",
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
-    "undici": "^6.18.1"
+    "undici": "^6.29.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
