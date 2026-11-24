@@ -83,9 +83,11 @@ The script imports both files if present and renames them to `*.migrated`. Exist
 | Command | Description |
 |---|---|
 | `/shop create <title> [items]` | Create a list. `items` is semicolon-separated. The list is posted publicly in the current channel and becomes its active list. Titles must be unique within a guild. |
-| `/shop add <item> [quantity]` | Add items to the channel's active list. Multiple items use `;`. A quantity above 1 applies to every item in the command and is stored as `item (N)`. |
+| `/shop add <item> [quantity]` | Add items to the channel's active list. Multiple items use `;`. A quantity above 1 is stored per item and shown as `×N`. |
 | `/shop list [title]` | Display a list (autocomplete). Makes it the active list in the current channel. Without a title, uses the channel's active list. |
 | `/shop clear` | Remove all items (checked and unchecked) from the active list. |
+| `/shop sort` | Sort the active list by item name. |
+| `/shop delete <title>` | Delete a list after an explicit confirmation button. |
 | `/shop lists` | Show all lists with completion counts; marks the one active in this channel. |
 | `/shop help` | Show the usage embed. |
 | `/test` | Developer utility; posts a test embed and adds emoji reactions. Needs Add Reactions to succeed. |
@@ -96,11 +98,13 @@ The script imports both files if present and renames them to `*.migrated`. Exist
 
 - Click an item button to toggle it. The button flips between `⬜` (grey) and `✅` (green), and the embed is edited in place.
 - **➕ Add** opens a modal; enter items separated by `;`.
-- **✏️ Edit** opens a modal asking for the item number (1–99) and the new text.
+- **✏️ Edit** opens a modal asking for the global item number (1–N) and the new text.
+- **🗑️ Remove** opens a modal asking for the global item number to delete.
 - **🧹 Clear Done** deletes checked items and only appears while something is checked.
 - **🔄 Refresh** re-renders the list from the database.
+- **◀ Previous / ▶ Next** appear when the list has more than 15 items; the middle button shows `page/total`.
 
-The first 20 items get buttons. Items 21 and beyond are listed in the embed as text and cannot be toggled by button.
+The embed opens with a ten-block progress bar and shows the current page of up to 15 items, numbered globally. Item numbers on later pages remain valid for `✏️ Edit` and `🗑️ Remove`. `/shop sort` resets the view to page 1.
 
 ### Active list behaviour
 
@@ -130,7 +134,7 @@ The list message or its database row was deleted. Re-post it with `/shop list "L
 
 ### Button presses seem to do nothing
 
-Only the first 20 items have buttons. Check the embed for items shown as text, and use `/shop add` or the Add modal to append items; numbering is positional.
+Every item has a button on some page. Use ◀ / ▶ to reach it; the numbers are global, and ✏️ Edit or 🗑️ Remove accept numbers from any page.
 
 ### `/test` fails
 

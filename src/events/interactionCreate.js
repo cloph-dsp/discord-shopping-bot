@@ -10,7 +10,7 @@ const storage = require('../utils/storage');
 const { createShoppingListEmbed } = require('../utils/embeds');
 const { createShoppingListButtons, disableAllButtons } = require('../utils/buttons');
 const messageCache = require('../utils/messageCache');
-const { ADD_PREFIX, EDIT_PREFIX, fitModalTitle } = require('../utils/modalTitles');
+const { ADD_PREFIX, EDIT_PREFIX, REMOVE_PREFIX, fitModalTitle } = require('../utils/modalTitles');
 
 // ponytail: removed queueMessageOperation (caused deadlocks).
 // DB ops are sync, Discord message.edit is idempotent — no queue needed.
@@ -81,6 +81,8 @@ module.exports = {
         await handleAddItemModalSubmit(interaction);
       } else if (interaction.customId.startsWith('editItemModal:')) {
         await handleEditItemModalSubmit(interaction);
+      } else if (interaction.customId.startsWith('removeItemModal:')) {
+        await handleRemoveItemModalSubmit(interaction);
       }
       return;
     }
@@ -93,7 +95,7 @@ module.exports = {
 
     // ===== MODAL BUTTONS (add_item, edit_item) =====
     // These must be shown within 3 seconds - NO DEFERRED OR OTHER DELAYS
-    if (customId === 'add_item' || customId === 'edit_item') {
+    if (customId === 'add_item' || customId === 'edit_item' || customId === 'remove_item') {
       const elapsed = Date.now() - startTime;
       console.log(`[BUTTON] Modal button detected: ${customId}, elapsed: ${elapsed}ms`);
       
@@ -178,7 +180,31 @@ module.exports = {
             new ActionRowBuilder().addComponents(indexInput),
             new ActionRowBuilder().addComponents(textInput)
           );
-        }
+        } else if (customId === 'remove_item') {
+            const row = storage.getListIdAndTitleByMessageId(messageId);
+            if (!row) {
+              return interaction.reply({
+                content: '❌ This shopping list no longer exists.',
+                flags: MessageFlags.Ephemeral
+              });
+            }
+            if (storage.countItemsByListId(row.id) === 0) {
+              return interaction.reply({ content: '❌ No items to remove.', flags: MessageFlags.Ephemeral });
+            }
+
+            modal = new ModalBuilder()
+              .setCustomId(`removeItemModal:${row.id}`)
+              .setTitle(fitModalTitle(REMOVE_PREFIX, row.title));
+
+            const indexInput = new TextInputBuilder()
+              .setCustomId('remove_item_index')
+              .setLabel('Item number to remove')
+              .setPlaceholder('1')
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(indexInput));
+          }
 
         // Show modal - THIS MUST SUCCEED WITHIN 3 SECONDS
         if (modal) {
@@ -199,6 +225,16 @@ module.exports = {
         }
         return;
       }
+    }
+
+    // ===== PAGINATION =====
+    if (customId === 'page_prev' || customId === 'page_next') {
+      return handlePageButton(interaction, customId === 'page_next' ? 1 : -1);
+    }
+
+    // ===== DELETE CONFIRMATION =====
+    if (customId.startsWith('delete_yes:') || customId.startsWith('delete_no:')) {
+      return handleDeleteConfirmation(interaction, customId.startsWith('delete_yes:'));
     }
 
     // ===== OTHER BUTTONS (toggle, clear, refresh) =====
@@ -423,6 +459,110 @@ async function handleEditItemModalSubmit(interaction) {
   }
 }
 
+async function handlePageButton(interaction, delta) {
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } catch (error) {
+    console.error('Error deferring page button:', error.message);
+    return;
+  }
+
+  const found = storage.getListByMessageId(interaction.message.id);
+  if (!found) {
+    await interaction.editReply({ content: '❌ This shopping list no longer exists.' });
+    return;
+  }
+
+  const page = storage.setListPage(found.listId, storage.getListPage(found.listId) + delta);
+  const channel = await resolveChannel(interaction.client, found.list.channelId, interaction.channel);
+  try {
+    await withTimeout(refreshListMessage(interaction.client, found.listId, channel, false), 8000, 'refresh page');
+  } catch (error) {
+    console.error('Refresh after page change failed:', error.message);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(found.list.items.length / storage.PAGE_SIZE));
+  await interaction.editReply({ content: `📄 Page ${page + 1}/${totalPages}` });
+}
+
+async function handleDeleteConfirmation(interaction, confirmed) {
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } catch (error) {
+    console.error('Error deferring delete confirmation:', error.message);
+    return;
+  }
+
+  const [, listId] = interaction.customId.split(':');
+  if (!confirmed) {
+    await interaction.editReply({ content: '❌ Delete cancelled.' });
+    return;
+  }
+
+  const list = storage.getList(listId);
+  if (!list) {
+    await interaction.editReply({ content: '❌ This list no longer exists.' });
+    return;
+  }
+
+  if (list.messageId) {
+    try {
+      const channel = await withTimeout(
+        resolveChannel(interaction.client, list.channelId, interaction.channel), 5000, 'resolve channel delete'
+      );
+      const message = await withTimeout(messageCache.getMessage(channel, list.messageId), 5000, 'fetch message delete');
+      if (message) await message.delete();
+      messageCache.invalidate(list.messageId);
+    } catch (error) {
+      console.error('Could not delete list message:', error.message);
+    }
+  }
+
+  storage.deleteList(listId);
+  await interaction.editReply({ content: `🗑️ Deleted list "${list.title}".` });
+}
+
+async function handleRemoveItemModalSubmit(interaction) {
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } catch (error) {
+    console.error('Error deferring remove modal:', error.message);
+    return;
+  }
+
+  const [, listId] = interaction.customId.split(':');
+  const index = parseInt(interaction.fields.getTextInputValue('remove_item_index'), 10) - 1;
+  const list = storage.getList(listId);
+  if (!list) {
+    await interaction.editReply({ content: '❌ List no longer exists.' });
+    return;
+  }
+  if (!Number.isInteger(index) || index < 0 || index >= list.items.length) {
+    await interaction.editReply({ content: `❌ Invalid item number. List has ${list.items.length} items.` });
+    return;
+  }
+
+  const target = list.items[index];
+  let removed = false;
+  try {
+    const channel = await withTimeout(
+      resolveChannel(interaction.client, list.channelId, interaction.channel), 5000, 'resolve channel remove'
+    );
+    removed = storage.removeItem(listId, target.id);
+    try {
+      await withTimeout(refreshListMessage(interaction.client, listId, channel, false), 8000, 'refresh remove');
+    } catch (refreshError) {
+      console.error('Refresh after remove failed:', refreshError.message);
+    }
+    await interaction.editReply({
+      content: `🗑️ Removed "${target.text}".` + (removed ? '' : '\n⚠️ Item was already gone.')
+    });
+  } catch (error) {
+    console.error('Remove modal error:', error);
+    await interaction.editReply({ content: removed ? '⚠️ Item removed; display refresh failed.' : '❌ Failed to remove item.' });
+  }
+}
+
 // ===== UTILITY FUNCTIONS =====
 
 async function refreshListMessage(client, listId, channelHint, disableButtons = false) {
@@ -448,10 +588,12 @@ async function refreshListMessage(client, listId, channelHint, disableButtons = 
       return null;
     }
 
-    const embed = createShoppingListEmbed(list);
+    // Re-clamp first: removals may have shortened the list since the last page was set.
+    const page = storage.setListPage(listId, storage.getListPage(listId)) ?? 0;
+    const embed = createShoppingListEmbed(list, page);
     const buttons = disableButtons
-      ? disableAllButtons(createShoppingListButtons(list))
-      : createShoppingListButtons(list);
+      ? disableAllButtons(createShoppingListButtons(list, page))
+      : createShoppingListButtons(list, page);
     await withTimeout(message.edit({ embeds: [embed], components: buttons }), 5000, 'edit message');
     messageCache.updateCache(message);
     return message;

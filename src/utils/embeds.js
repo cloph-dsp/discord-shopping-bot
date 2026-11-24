@@ -2,80 +2,73 @@ const { EmbedBuilder } = require('discord.js');
 
 const MAX_DESCRIPTION = 4096;
 const MAX_TITLE = 256;
+const DEFAULT_PAGE_SIZE = 15;
 
-function createShoppingListEmbed(list) {
+function progressBar(checked, total) {
+  if (total === 0) return '░'.repeat(10);
+  const percent = Math.round((checked / total) * 100);
+  const filled = Math.min(10, Math.round(percent / 10));
+  return '█'.repeat(filled) + '░'.repeat(10 - filled);
+}
+
+function createShoppingListEmbed(list, page = 0, pageSize = DEFAULT_PAGE_SIZE) {
   const checkedItems = list.items.filter(item => item.checked);
   const totalItems = list.items.length;
-  const isComplete = totalItems > 0 && checkedItems.length === totalItems;
-  
-  // Dynamic color based on completion status
+  const checkedCount = checkedItems.length;
+  const isComplete = totalItems > 0 && checkedCount === totalItems;
+  const percent = totalItems === 0 ? 0 : Math.round((checkedCount / totalItems) * 100);
+
   let embedColor;
   if (totalItems === 0) {
-    embedColor = 0x99AAB5; // Gray - empty list
+    embedColor = 0x99AAB5;
   } else if (isComplete) {
-    embedColor = 0x57F287; // Green - all done!
-  } else if (checkedItems.length > 0) {
-    embedColor = 0xFEE75C; // Yellow - in progress
+    embedColor = 0x57F287;
+  } else if (checkedCount > 0) {
+    embedColor = 0xFEE75C;
   } else {
-    embedColor = 0x5865F2; // Blurple - fresh list
+    embedColor = 0x5865F2;
   }
-  
+
   const embed = new EmbedBuilder()
     .setTitle(`🛒 ${String(list.title).slice(0, MAX_TITLE - 2)}`)
     .setColor(embedColor)
     .setTimestamp();
 
   if (totalItems === 0) {
-    embed.setDescription('*Your shopping list is empty. Click the "Add Items" button below to get started!*');
+    embed.setDescription('*Your shopping list is empty. Press ➕ Add to get started!*');
     embed.setFooter({ text: '⬇️ Use the buttons below' });
     return embed;
   }
 
-  // Compact summary instead of full list (buttons show everything)
-  let description;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const currentPage = Math.min(Math.max(0, Number(page) || 0), totalPages - 1);
+  const start = currentPage * pageSize;
+  const visible = list.items.slice(start, start + pageSize);
 
-  if (totalItems <= 20) {
-    // All items have buttons - no need to show in embed
-    description = '*Use the buttons below to check off items as you shop!*';
-  } else {
-    // Show items beyond the 20 that have buttons, within Discord's 4096-char cap.
-    const header = '**First 20 items have buttons below.**\n\n**Remaining items:**\n';
-    const budget = MAX_DESCRIPTION - header.length - 100;
-    let body = '';
-    let hidden = 0;
-
-    for (let i = 20; i < list.items.length; i++) {
-      const item = list.items[i];
-      const status = item.checked ? '✅' : '⬜';
-      const itemText = item.checked ? `~~${item.text}~~` : item.text;
-      const line = `${i + 1}. ${status} ${String(itemText).slice(0, 150)}\n`;
-      if (body.length + line.length > budget) {
-        hidden++;
-        continue;
-      }
-      body += line;
-    }
-
-    if (hidden > 0) {
-      body += `\n_… and ${hidden} more item${hidden === 1 ? '' : 's'}._`;
-    }
-    description = header + body;
+  let description = `${progressBar(checkedCount, totalItems)} **${percent}%** · ${checkedCount}/${totalItems} checked\n\n`;
+  for (const [offset, item] of visible.entries()) {
+    const index = start + offset;
+    const quantity = item.quantity > 1 ? ` ×${item.quantity}` : '';
+    const text = `${String(item.text).slice(0, 100)}${quantity}`;
+    description += `${index + 1}. ${item.checked ? '✅' : '⬜'} ${item.checked ? `~~${text}~~` : text}\n`;
   }
-
+  if (totalPages > 1) {
+    description += `\n_Page ${currentPage + 1}/${totalPages} — use ◀ / ▶ to move._`;
+  }
+  if (description.length > MAX_DESCRIPTION) {
+    description = `${description.slice(0, MAX_DESCRIPTION - 40).trimEnd()}\n\n_… list truncated._`;
+  }
   embed.setDescription(description.trim());
 
-  // Enhanced footer with completion status
-  const completionText = `${checkedItems.length}/${totalItems} items`;
-  let footerText = '';
-  
+  const completionText = `${checkedCount}/${totalItems} items`;
+  let footerText;
   if (isComplete) {
     footerText = `✨ All done! (${completionText})`;
-  } else if (checkedItems.length > 0) {
+  } else if (checkedCount > 0) {
     footerText = `📝 ${completionText} checked - Keep going!`;
   } else {
     footerText = `🛒 ${completionText} - Let's shop!`;
   }
-  
   embed.setFooter({ text: footerText });
 
   return embed;
@@ -90,34 +83,39 @@ function createInstructionEmbed() {
       {
         name: '📝 Getting Started',
         value: '1. Create a list: `/shop create "My List" milk;bread;eggs`\n' +
-               '2. Click buttons to interact with items\n' +
-               '3. Lists can be displayed in any channel!',
+               '2. Press the item buttons to check things off\n' +
+               '3. Lists can be displayed in any channel',
         inline: false
       },
       {
-        name: '🎯 How It Works',
-        value: '**Item Buttons** - Click to check/uncheck items\n' +
-               '**➕ Add** - Add new items quickly\n' +
-               '**🧹 Clear Done** - Remove all completed items\n' +
-               '**✏️ Edit** - Modify existing items\n' +
-               '**🔄 Refresh** - Update the list display',
+        name: '🎯 Buttons',
+        value: '**Item button** - check/uncheck that item\n' +
+               '**➕ Add** - add items through a modal\n' +
+               '**✏️ Edit** - rename an item by its number\n' +
+               '**🗑️ Remove** - delete one item by its number\n' +
+               '**🧹 Clear Done** - remove all checked items\n' +
+               '**🔄 Refresh** - redraw the list\n' +
+               '**◀ / ▶** - browse pages when a list has more than 15 items',
         inline: false
       },
       {
-        name: '📋 Main Commands',
-        value: '`/shop create <title> [items]` - Create new list\n' +
-               '`/shop list [title]` - Display a list (with autocomplete)\n' +
-               '`/shop lists` - Show all your lists\n' +
-               '`/shop add <item>` - Add items to active list\n' +
-               '`/shop clear` - Clear the active list',
+        name: '📋 Commands',
+        value: '`/shop create <title> [items]` - create a list\n' +
+               '`/shop add <item> [quantity]` - add to the active list\n' +
+               '`/shop list [title]` - display a list\n' +
+               '`/shop sort` - sort the active list by name\n' +
+               '`/shop delete <title>` - delete a list (asks for confirmation)\n' +
+               '`/shop clear` - empty the active list\n' +
+               '`/shop lists` - show all lists\n' +
+               '`/shop help` - this help',
         inline: false
       },
       {
         name: '💡 Tips',
-        value: '• Lists work in any channel\n' +
-               '• Use semicolons to add multiple items: `milk;bread;eggs`\n' +
-               '• Embed colors change based on progress\n' +
-               '• Up to 20 items can have buttons (more items shown in text)',
+        value: '• Separate multiple items with `;`\n' +
+               '• Quantities are stored per item and shown as `×N`\n' +
+               '• The bar at the top shows overall progress\n' +
+               '• Lists and titles are private to each server',
         inline: false
       }
     )
@@ -129,5 +127,6 @@ function createInstructionEmbed() {
 
 module.exports = {
   createShoppingListEmbed,
-  createInstructionEmbed
+  createInstructionEmbed,
+  progressBar
 };

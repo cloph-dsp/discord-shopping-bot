@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const storage = require('../utils/storage');
 const { createShoppingListEmbed, createInstructionEmbed } = require('../utils/embeds');
 const { createShoppingListButtons } = require('../utils/buttons');
@@ -58,6 +58,19 @@ module.exports = {
         .setDescription('Show all available shopping lists'))
     .addSubcommand(subcommand =>
       subcommand
+        .setName('sort')
+        .setDescription('Sort the active shopping list by item name'))
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('delete')
+        .setDescription('Delete a shopping list (asks for confirmation)')
+        .addStringOption(option =>
+          option.setName('title')
+            .setDescription('Title of the list to delete')
+            .setRequired(true)
+            .setAutocomplete(true)))
+    .addSubcommand(subcommand =>
+      subcommand
         .setName('help')
         .setDescription('Show help and instructions')),
 
@@ -81,6 +94,12 @@ module.exports = {
         break;
       case 'lists':
         await handleLists(interaction);
+        break;
+      case 'sort':
+        await handleSort(interaction);
+        break;
+      case 'delete':
+        await handleDelete(interaction);
         break;
       case 'help':
         await handleHelp(interaction);
@@ -159,10 +178,11 @@ async function handleCreate(interaction) {
   
   // Set as active list for this channel
   storage.setActiveList(channelId, list.id);
+  storage.setListPage(list.id, 0);
   
   // Create and send the embed with buttons
-  const embed = createShoppingListEmbed(list);
-  const buttons = createShoppingListButtons(list);
+  const embed = createShoppingListEmbed(list, 0);
+  const buttons = createShoppingListButtons(list, 0);
   
   // Send the shopping list as a separate message with buttons
   const message = await interaction.channel.send({ embeds: [embed], components: buttons });
@@ -218,7 +238,7 @@ async function handleAdd(interaction) {
   let addedItems = [];
   for (const item of items) {
     storage.addItem(listId, item, quantity);
-    const itemText = quantity > 1 ? `${item} (${quantity})` : item;
+    const itemText = quantity > 1 ? `${item} ×${quantity}` : item;
     addedItems.push(itemText);
   }
 
@@ -234,8 +254,9 @@ async function handleAdd(interaction) {
   }
   
   const updatedList = storage.getList(listId);
-  const embed = createShoppingListEmbed(updatedList);
-  const buttons = createShoppingListButtons(updatedList);
+  const page = storage.setListPage(listId, storage.getListPage(listId)) ?? 0;
+  const embed = createShoppingListEmbed(updatedList, page);
+  const buttons = createShoppingListButtons(updatedList, page);
   await message.edit({ embeds: [embed], components: buttons });
   messageCache.updateCache(message);
   
@@ -293,6 +314,7 @@ async function handleList(interaction) {
   
   // Set as active list for this channel
   storage.setActiveList(channelId, listId);
+  storage.setListPage(listId, 0);
   
   // Update acknowledgment
   await interaction.editReply({ 
@@ -319,8 +341,8 @@ async function handleList(interaction) {
   }
   
   console.log(`[SHOP:LIST] About to create embed/buttons at ${Date.now() - startTime}ms`);
-  const embed = createShoppingListEmbed(list);
-  const buttons = createShoppingListButtons(list);
+  const embed = createShoppingListEmbed(list, 0);
+  const buttons = createShoppingListButtons(list, 0);
   
   console.log(`[SHOP:LIST] About to send message at ${Date.now() - startTime}ms`);
   // Send new public message with the shopping list and buttons
@@ -362,8 +384,9 @@ async function handleClear(interaction) {
       const message = await messageCache.getMessage(interaction.channel, list.messageId);
       if (message) {
         const updatedList = storage.getList(listId);
-        const embed = createShoppingListEmbed(updatedList);
-        const buttons = createShoppingListButtons(updatedList);
+        const page = storage.setListPage(listId, storage.getListPage(listId)) ?? 0;
+        const embed = createShoppingListEmbed(updatedList, page);
+        const buttons = createShoppingListButtons(updatedList, page);
         await message.edit({ embeds: [embed], components: buttons });
         messageCache.updateCache(message);
       } else {
@@ -414,6 +437,82 @@ async function handleLists(interaction) {
   listText += `\n💡 Use \`/shop list "ListName"\` to display a list in this channel.`;
   
   await interaction.editReply({ content: listText });
+}
+
+async function handleSort(interaction) {
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } catch (error) {
+    console.error('Failed to defer handleSort:', error.message);
+    return;
+  }
+
+  const active = storage.getActiveList(interaction.channel.id);
+  if (!active) {
+    return interaction.editReply({ content: '❌ No active shopping list in this channel.' });
+  }
+
+  const { listId, list } = active;
+  const count = storage.sortList(listId);
+  storage.setListPage(listId, 0);
+
+  if (list.messageId) {
+    try {
+      const channel = list.channelId
+        ? await interaction.client.channels.fetch(list.channelId).catch(() => interaction.channel)
+        : interaction.channel;
+      const message = await messageCache.getMessage(channel, list.messageId);
+      if (message) {
+        const updated = storage.getList(listId);
+        await message.edit({
+          embeds: [createShoppingListEmbed(updated, 0)],
+          components: createShoppingListButtons(updated, 0)
+        });
+        messageCache.updateCache(message);
+      } else {
+        storage.clearListMessage(listId);
+      }
+    } catch (error) {
+      console.error('Error refreshing message after sort:', error.message);
+    }
+  }
+
+  await interaction.editReply({ content: `🔤 Sorted ${count} item${count === 1 ? '' : 's'} in "${list.title}".` });
+}
+
+async function handleDelete(interaction) {
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } catch (error) {
+    console.error('Failed to defer handleDelete:', error.message);
+    return;
+  }
+
+  const title = interaction.options.getString('title');
+  const found = storage.getListByTitle(title, guildIdOf(interaction));
+  if (!found) {
+    const titles = storage.getAllListTitles(guildIdOf(interaction));
+    return interaction.editReply({
+      content: `❌ No list titled "${title}". Available: ${titles.join(', ') || 'none'}`
+    });
+  }
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`delete_yes:${found.listId}`)
+      .setLabel('Delete')
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji('🗑️'),
+    new ButtonBuilder()
+      .setCustomId(`delete_no:${found.listId}`)
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  await interaction.editReply({
+    content: `⚠️ Delete "${title}" (${found.list.items.length} items)? This cannot be undone.`,
+    components: [row]
+  });
 }
 
 async function handleHelp(interaction) {

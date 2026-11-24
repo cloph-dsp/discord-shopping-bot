@@ -12,6 +12,7 @@ try {
 // DSB_DATA_DIR exists so demo/tests never touch the production database.
 const DATA_DIR = process.env.DSB_DATA_DIR || path.join(__dirname, '..', '..', 'data');
 const LEGACY_GUILD_ID = 'legacy';
+const PAGE_SIZE = 15;
 const DB_FILE = path.join(DATA_DIR, 'storage.db');
 
 class SQLiteShoppingListStorage {
@@ -32,12 +33,15 @@ class SQLiteShoppingListStorage {
         messageId TEXT,
         channelId TEXT,
         guildId TEXT NOT NULL DEFAULT '${LEGACY_GUILD_ID}',
+        page INTEGER NOT NULL DEFAULT 0,
         createdAt INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS items (
         id TEXT PRIMARY KEY,
         listId TEXT NOT NULL,
         text TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        position INTEGER NOT NULL DEFAULT 0,
         checked INTEGER NOT NULL DEFAULT 0,
         createdAt INTEGER NOT NULL,
         FOREIGN KEY(listId) REFERENCES lists(id) ON DELETE CASCADE
@@ -59,6 +63,29 @@ class SQLiteShoppingListStorage {
     if (!columns.includes('guildId')) {
       this.db.exec(`ALTER TABLE lists ADD COLUMN guildId TEXT NOT NULL DEFAULT '${LEGACY_GUILD_ID}'`);
       console.log('[DB] Added guildId column to existing lists.');
+    }
+    if (!columns.includes('page')) {
+      this.db.exec('ALTER TABLE lists ADD COLUMN page INTEGER NOT NULL DEFAULT 0');
+      console.log('[DB] Added page column to existing lists.');
+    }
+
+    const itemColumns = this.db.prepare('PRAGMA table_info(items)').all().map(c => c.name);
+    if (!itemColumns.includes('quantity')) {
+      this.db.exec('ALTER TABLE items ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1');
+      // Older versions stored quantity as a " (N)" suffix in the item text.
+      const legacy = this.db.prepare('SELECT id, text FROM items').all();
+      const update = this.db.prepare('UPDATE items SET text = ?, quantity = ? WHERE id = ?');
+      this.db.transaction(() => {
+        for (const row of legacy) {
+          const match = String(row.text).match(/^(.*?)\s\((\d+)\)$/);
+          if (match) update.run(match[1], Number(match[2]), row.id);
+        }
+      })();
+      console.log('[DB] Migrated legacy quantity suffixes into the quantity column.');
+    }
+    if (!itemColumns.includes('position')) {
+      this.db.exec('ALTER TABLE items ADD COLUMN position INTEGER NOT NULL DEFAULT 0');
+      console.log('[DB] Added position column to existing items.');
     }
 
     // One active list per channel. Seed from pre-upgrade databases (newest wins).
@@ -88,14 +115,16 @@ class SQLiteShoppingListStorage {
       updateListMessage: this.db.prepare('UPDATE lists SET messageId = ? WHERE id = ?'),
       deleteList: this.db.prepare('DELETE FROM lists WHERE id = ?'),
 
-      insertItem: this.db.prepare('INSERT INTO items (id, listId, text, checked, createdAt) VALUES (?, ?, ?, ?, ?)'),
-      getItemsForList: this.db.prepare('SELECT * FROM items WHERE listId = ? ORDER BY rowid'),
+      insertItem: this.db.prepare('INSERT INTO items (id, listId, text, quantity, position, checked, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+      getItemsForList: this.db.prepare('SELECT * FROM items WHERE listId = ? ORDER BY position, rowid'),
       getItemById: this.db.prepare('SELECT * FROM items WHERE id = ?'),
-      deleteItem: this.db.prepare('DELETE FROM items WHERE id = ?'),
-      toggleItem: this.db.prepare('UPDATE items SET checked = 1 - checked WHERE id = ?'),
+      deleteItem: this.db.prepare('DELETE FROM items WHERE id = ? AND listId = ?'),
+      toggleItem: this.db.prepare('UPDATE items SET checked = 1 - checked WHERE id = ? AND listId = ?'),
       clearCompleted: this.db.prepare('DELETE FROM items WHERE listId = ? AND checked = 1'),
-      editItem: this.db.prepare('UPDATE items SET text = ? WHERE id = ?'),
+      editItem: this.db.prepare('UPDATE items SET text = ? WHERE id = ? AND listId = ?'),
       clearListItems: this.db.prepare('DELETE FROM items WHERE listId = ?'),
+      setListPage: this.db.prepare('UPDATE lists SET page = ? WHERE id = ?'),
+      setItemPosition: this.db.prepare('UPDATE items SET position = ? WHERE id = ?'),
 
       getActiveList: this.db.prepare(`
         SELECT l.* FROM active_lists a
@@ -116,8 +145,8 @@ class SQLiteShoppingListStorage {
     const createdAt = Date.now();
     this.db.transaction(() => {
       this.stmts.insertList.run(listId, title, null, null, guildId, createdAt);
-      for (const it of items) {
-        this.stmts.insertItem.run(this.generateId(), listId, it, 0, Date.now());
+      for (const [index, it] of items.entries()) {
+        this.stmts.insertItem.run(this.generateId(), listId, it, 1, index + 1, 0, Date.now());
       }
     })();
     return this.getList(listId);
@@ -160,19 +189,22 @@ class SQLiteShoppingListStorage {
   }
 
   addItem(listId, itemText, quantity = 1) {
-    const text = quantity > 1 ? `${itemText} (${quantity})` : itemText;
     const itemId = this.generateId();
-    this.stmts.insertItem.run(itemId, listId, text, 0, Date.now());
+    const qty = Number.isInteger(quantity) && quantity > 1 ? quantity : 1;
+    const nextPosition = this.db.prepare(
+      'SELECT COALESCE(MAX(position), 0) + 1 AS n FROM items WHERE listId = ?'
+    ).get(listId).n;
+    this.stmts.insertItem.run(itemId, listId, itemText, qty, nextPosition, 0, Date.now());
     return this.stmts.getItemById.get(itemId);
   }
 
   removeItem(listId, itemId) {
-    const info = this.stmts.deleteItem.run(itemId);
+    const info = this.stmts.deleteItem.run(itemId, listId);
     return info.changes > 0;
   }
 
   toggleItemChecked(listId, itemId) {
-    this.stmts.toggleItem.run(itemId);
+    this.stmts.toggleItem.run(itemId, listId);
     return this.stmts.getItemById.get(itemId);
   }
 
@@ -182,7 +214,7 @@ class SQLiteShoppingListStorage {
   }
 
   editItem(listId, itemId, newText) {
-    const info = this.stmts.editItem.run(newText, itemId);
+    const info = this.stmts.editItem.run(newText, itemId, listId);
     return info.changes > 0 ? this.stmts.getItemById.get(itemId) : null;
   }
 
@@ -227,6 +259,32 @@ class SQLiteShoppingListStorage {
     return row ? row.count : 0;
   }
 
+  getListPage(listId) {
+    const row = this.stmts.getListById.get(listId);
+    return row ? Math.max(0, row.page || 0) : 0;
+  }
+
+  /** Clamp the stored page to the current item count; returns the applied page. */
+  setListPage(listId, page) {
+    if (!this.getList(listId)) return null;
+    const totalPages = Math.max(1, Math.ceil(this.countItemsByListId(listId) / PAGE_SIZE));
+    const clamped = Math.min(Math.max(0, Number(page) || 0), totalPages - 1);
+    this.stmts.setListPage.run(clamped, listId);
+    return clamped;
+  }
+
+  sortList(listId) {
+    const list = this.getList(listId);
+    if (!list) return 0;
+    const sorted = [...list.items].sort((a, b) =>
+      String(a.text).localeCompare(String(b.text), undefined, { sensitivity: 'base' })
+    );
+    this.db.transaction(() => {
+      sorted.forEach((item, index) => this.stmts.setItemPosition.run(index + 1, item.id));
+    })();
+    return sorted.length;
+  }
+
   _titlesForGuild(guildId) {
     return this.db.prepare(`
       SELECT title FROM lists
@@ -267,6 +325,8 @@ class SQLiteShoppingListStorage {
     const items = this.stmts.getItemsForList.all(row.id).map(i => ({
       id: i.id,
       text: i.text,
+      quantity: i.quantity ?? 1,
+      position: i.position ?? 0,
       checked: i.checked === 1,
       createdAt: new Date(i.createdAt)
     }));
@@ -278,9 +338,11 @@ class SQLiteShoppingListStorage {
       messageId: row.messageId,
       channelId: row.channelId,
       guildId: row.guildId,
+      page: row.page ?? 0,
       createdAt: new Date(row.createdAt)
     };
   }
 }
 
 module.exports = new SQLiteShoppingListStorage();
+module.exports.PAGE_SIZE = PAGE_SIZE;

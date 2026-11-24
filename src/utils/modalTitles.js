@@ -2,6 +2,7 @@
 const MODAL_TITLE_MAX = 45;
 const ADD_PREFIX = 'Add Items — ';
 const EDIT_PREFIX = 'Edit Item — ';
+const REMOVE_PREFIX = 'Remove Item — ';
 
 function truncate(str, len) {
   const value = String(str ?? '');
@@ -13,4 +14,4 @@ function fitModalTitle(prefix, title) {
   return prefix + truncate(title, room);
 }
 
-module.exports = { MODAL_TITLE_MAX, ADD_PREFIX, EDIT_PREFIX, fitModalTitle };
+module.exports = { MODAL_TITLE_MAX, ADD_PREFIX, EDIT_PREFIX, REMOVE_PREFIX, fitModalTitle };

@@ -5,8 +5,11 @@ A Discord bot for shared shopping lists. Each list is a public message with butt
 ## Features
 
 - `/shop` slash commands with autocomplete for list titles
-- One toggle button per item (the first 20 items), checked state updated in place
-- Modals for adding multiple items and editing an item
+- Progress bar and per-page item list in the embed
+- One toggle button per item, 15 items per page with ◀ / ▶ navigation
+- Modals for adding, editing and removing items
+- Structured per-item quantities displayed as `×N`
+- `/shop sort` and `/shop delete` (with confirmation)
 - Multiple named lists; each channel tracks its own active list
 - Embed colour and footer reflect progress
 - Persistent SQLite storage
@@ -17,9 +20,11 @@ A Discord bot for shared shopping lists. Each list is a public message with butt
 | Command | Description |
 |---|---|
 | `/shop create <title> [items]` | Create a list. `items` is semicolon-separated (e.g. `milk;bread;eggs`). The list becomes active in the current channel and is posted as a public message. |
-| `/shop add <item> [quantity]` | Add one or more items to the channel's active list. Separate multiple items with `;`. A `quantity` above 1 is stored as `item (N)`. |
+| `/shop add <item> [quantity]` | Add one or more items to the channel's active list. Separate multiple items with `;`. A `quantity` above 1 is stored on the item and shown as `×N`. |
 | `/shop list [title]` | Display a list, with autocomplete. The list becomes active in the current channel. Without `title`, displays the channel's active list. |
 | `/shop clear` | Remove all items from the active list, checked and unchecked. |
+| `/shop sort` | Sort the active list by item name. |
+| `/shop delete <title>` | Delete a list after an explicit confirmation button. |
 | `/shop lists` | Show all lists with their completion counts and mark the one active in this channel. |
 | `/shop help` | Show the in-Discord usage embed. |
 | `/test` | Developer utility. Posts a test embed and adds emoji reactions; only this command needs Add Reactions. |
@@ -34,12 +39,12 @@ A Discord bot for shared shopping lists. Each list is a public message with butt
 | `✅ N. item` | Checked item. Click again to uncheck it. |
 | `➕ Add` | Opens a modal with a paragraph field; separate items with `;`. |
 | `✏️ Edit` | Opens a modal asking for an item number and the new text. |
+| `🗑️ Remove` | Opens a modal asking for an item number to delete. |
 | `🧹 Clear Done` | Deletes all checked items. Only shown while at least one item is checked. |
 | `🔄 Refresh` | Re-renders the list message from the database. |
+| `◀ Previous` / `▶ Next` | Move between pages; shown only when the list holds more than 15 items. The middle button shows `page/total`. |
 
-Item buttons are limited to 20 (four rows of five), leaving the fifth row for the controls. Items beyond 20 are shown in the embed description, numbered 21 onward, with `⬜`/`✅` and strikethrough when checked; they have no buttons.
-
-Embed colour indicates progress: grey for an empty list, blurple when nothing is checked, yellow when some items are checked, green when all are checked. The footer shows completion progress (`N/M items` plus a state message), except on an empty list, where it points at the buttons.
+Each page holds up to 15 item buttons, followed by the control row and (when needed) the navigation row. The embed lists the same 15 items with their check state and strikethrough. Item numbers are global, so `✏️ Edit` and `🗑️ Remove` work on any item regardless of the current page. Embed colour and the ten-block bar reflect overall progress.
 
 ## Requirements
 
@@ -65,7 +70,7 @@ Data lives in `data/storage.db` (SQLite via `better-sqlite3`) and is created on 
 
 ## Tests
 
-`npm test` runs the storage, UI-limit and migration tests with a throwaway database. `node demo.js` also uses a throwaway database and never writes to `data/storage.db`.
+`npm test` runs 11 storage, UI-limit and migration tests with a throwaway database. `node demo.js` also uses a throwaway database and never writes to `data/storage.db`.
 
 ## Project layout
 
